@@ -1,5 +1,19 @@
 <?php
 
+function isHttpsRequest(): bool
+{
+    if (APP_ENV === 'production') {
+        return true;
+    }
+
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+
+    return isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
+        && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https';
+}
+
 function resolveSessionCookieDomain(): string
 {
     $cookieDomain = SESSION_COOKIE_DOMAIN;
@@ -37,15 +51,28 @@ function initSecurity(): void
     ini_set('session.cookie_samesite', 'Lax');
     ini_set('session.gc_maxlifetime', (string) SESSION_LIFETIME);
 
-    $isSecure = APP_ENV === 'production'
-        || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-    if ($isSecure) {
-        ini_set('session.cookie_secure', '1');
-    }
-
     $cookieDomain = resolveSessionCookieDomain();
-    if ($cookieDomain !== '') {
-        ini_set('session.cookie_domain', $cookieDomain);
+    $isSecure = isHttpsRequest();
+
+    $cookieParams = [
+        'lifetime' => 0,
+        'path' => '/',
+        'domain' => $cookieDomain,
+        'secure' => $isSecure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ];
+
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params($cookieParams);
+    } else {
+        session_set_cookie_params(
+            $cookieParams['lifetime'],
+            $cookieParams['path'],
+            $cookieParams['domain'],
+            $cookieParams['secure'],
+            $cookieParams['httponly']
+        );
     }
 
     if (session_status() === PHP_SESSION_NONE) {

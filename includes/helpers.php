@@ -3,7 +3,17 @@
 function url(string $path = ''): string
 {
     $path = ltrim($path, '/');
-    return BASE_URL . ($path !== '' ? '/' . $path : '');
+    $query = '';
+    if (($pos = strpos($path, '?')) !== false) {
+        $query = substr($path, $pos);
+        $path = substr($path, 0, $pos);
+    }
+
+    if ($path === '') {
+        return BASE_URL . $query;
+    }
+
+    return BASE_URL . '/' . $path . $query;
 }
 
 function teacherCourseUrl(int $classId, string $query = ''): string

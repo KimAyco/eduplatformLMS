@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             recordLoginAttempt($email, true);
             loginUser($user);
+            session_write_close();
             redirect('superadmin/dashboard.php');
         }
     }

@@ -2,18 +2,13 @@
 
 function portalAuthSecret(): string
 {
-    $secret = trim((string) env('SUBDOMAIN_LOGIN_SECRET', ''));
-    if ($secret !== '') {
-        return $secret;
-    }
-
     $dbPass = (string) env('DB_PASS', '');
     $dbName = (string) env('DB_NAME', '');
-    if ($dbPass === '' || $dbName === '') {
-        return '';
+    if ($dbPass !== '' && $dbName !== '') {
+        return hash('sha256', APP_NAME . '|portal-auth|' . $dbName . '|' . $dbPass);
     }
 
-    return hash('sha256', APP_NAME . '|portal-auth|' . $dbName . '|' . $dbPass);
+    return trim((string) env('SUBDOMAIN_LOGIN_SECRET', ''));
 }
 
 function createPortalAuthSignature(string $schoolCode, int $timestamp): string
@@ -28,7 +23,7 @@ function createPortalAuthSignature(string $schoolCode, int $timestamp): string
     return hash_hmac('sha256', $payload, $secret);
 }
 
-function verifyPortalAuthSignature(string $schoolCode, int $timestamp, string $signature, int $maxAgeSeconds = 300): bool
+function verifyPortalAuthSignature(string $schoolCode, int $timestamp, string $signature, int $maxAgeSeconds = 1800): bool
 {
     $secret = portalAuthSecret();
     if ($secret === '' || $signature === '' || $timestamp <= 0) {
@@ -76,6 +71,11 @@ function portalAuthAllowedHost(string $host): bool
 
 function verifyPortalAuthRequest(): bool
 {
+    $returnHost = strtolower((string) parse_url($_POST['return_url'] ?? '', PHP_URL_HOST));
+    if ($returnHost !== '' && portalAuthAllowedHost($returnHost)) {
+        return true;
+    }
+
     $origin = parse_url($_SERVER['HTTP_ORIGIN'] ?? '', PHP_URL_HOST);
     $referer = parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_HOST);
 

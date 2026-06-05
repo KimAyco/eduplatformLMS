@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/init.php';
 
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
+
 $school = resolveSubdomainSchool();
 $errors = [];
 $primaryColor = subdomainPrimaryColor();

@@ -37,7 +37,10 @@ $portalTs = (int) ($_POST['portal_ts'] ?? 0);
 $portalSig = trim($_POST['portal_sig'] ?? '');
 
 if (!verifyPortalAuthSignature($schoolCode, $portalTs, $portalSig)) {
-    subdomainAuthRedirectBack($returnUrl, 'Your sign-in request expired. Please try again.');
+    if ($portalTs <= 0 || $portalSig === '') {
+        subdomainAuthRedirectBack($returnUrl, 'Portal sign-in is outdated. Refresh the page and try again.');
+    }
+    subdomainAuthRedirectBack($returnUrl, 'Your sign-in request expired. Refresh the page and try again.');
 }
 
 if (isLoggedIn()) {

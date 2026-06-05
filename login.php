@@ -63,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             recordLoginAttempt($email, true);
             loginUser($result);
+            session_write_close();
             redirectByRole();
         }
     }
@@ -85,9 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     clearOld();
 }
 
-$formAction = $schoolPreselected && !empty($school['school_code'])
-    ? 'login.php?code=' . urlencode($school['school_code'])
-    : 'login.php';
+$formAction = 'login.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
