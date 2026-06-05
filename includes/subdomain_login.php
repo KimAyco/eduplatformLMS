@@ -2,14 +2,25 @@
 
 function subdomainLoginSecret(): string
 {
-    return trim((string) env('SUBDOMAIN_LOGIN_SECRET', ''));
+    $secret = trim((string) env('SUBDOMAIN_LOGIN_SECRET', ''));
+    if ($secret !== '') {
+        return $secret;
+    }
+
+    $dbPass = (string) env('DB_PASS', '');
+    $dbName = (string) env('DB_NAME', '');
+    if ($dbPass === '' || $dbName === '') {
+        return '';
+    }
+
+    return hash('sha256', APP_NAME . '|subdomain-bridge|' . $dbName . '|' . $dbPass);
 }
 
 function createSubdomainLoginToken(int $userId, int $schoolId, int $ttlSeconds = 120): string
 {
     $secret = subdomainLoginSecret();
     if ($secret === '') {
-        throw new RuntimeException('SUBDOMAIN_LOGIN_SECRET is not configured.');
+        throw new RuntimeException('Subdomain login bridge is not configured.');
     }
 
     $payload = $userId . '|' . $schoolId . '|' . (time() + $ttlSeconds);

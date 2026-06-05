@@ -25,6 +25,12 @@ function initSecurity(): void
     }
 
     $cookieDomain = SESSION_COOKIE_DOMAIN;
+    if ($cookieDomain === '' && APP_ENV === 'production') {
+        $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+        if (preg_match('/(?:^|\.)((?:[^.]+\.)?[^.]+\.[^.]+)$/', $host, $matches)) {
+            $cookieDomain = '.' . $matches[1];
+        }
+    }
     if ($cookieDomain !== '') {
         ini_set('session.cookie_domain', $cookieDomain);
     }
