@@ -4,4 +4,5 @@ storage/logs/*.log
 uploads/*
 !uploads/.gitkeep
 !uploads/.htaccess
-school_subdomain/
+school_subdomain/**/config.php
+!school_subdomain/**/config.php.example

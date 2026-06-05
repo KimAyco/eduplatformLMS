@@ -28,7 +28,7 @@ function createSubdomainLoginToken(int $userId, int $schoolId, int $ttlSeconds =
 
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
-    $expiresAt = date('Y-m-d H:i:s', time() + $ttlSeconds);
+    $expiresAt = gmdate('Y-m-d H:i:s', time() + $ttlSeconds);
 
     db()->prepare('INSERT INTO subdomain_login_tokens (user_id, school_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
         ->execute([$userId, $schoolId, $hash, $expiresAt]);
