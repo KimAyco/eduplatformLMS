@@ -1,5 +1,24 @@
 <?php
 
+function resolveSessionCookieDomain(): string
+{
+    $cookieDomain = SESSION_COOKIE_DOMAIN;
+    if ($cookieDomain !== '') {
+        return $cookieDomain;
+    }
+
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '' || $host === 'localhost' || str_starts_with($host, '127.0.0.1')) {
+        return '';
+    }
+
+    if (preg_match('/(?:^|\.)((?:[^.]+\.)?[^.]+\.[^.]+)$/', $host, $matches)) {
+        return '.' . $matches[1];
+    }
+
+    return '';
+}
+
 function initSecurity(): void
 {
     if (!APP_DEBUG) {
@@ -24,13 +43,7 @@ function initSecurity(): void
         ini_set('session.cookie_secure', '1');
     }
 
-    $cookieDomain = SESSION_COOKIE_DOMAIN;
-    if ($cookieDomain === '' && APP_ENV === 'production') {
-        $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-        if (preg_match('/(?:^|\.)((?:[^.]+\.)?[^.]+\.[^.]+)$/', $host, $matches)) {
-            $cookieDomain = '.' . $matches[1];
-        }
-    }
+    $cookieDomain = resolveSessionCookieDomain();
     if ($cookieDomain !== '') {
         ini_set('session.cookie_domain', $cookieDomain);
     }

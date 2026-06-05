@@ -15,13 +15,6 @@ if ($school === null) {
     $configError = null;
 }
 
-if ($configError === null && isLoggedIn()) {
-    $user = currentUser();
-    if ($user && $user['role'] !== 'super_admin' && (int) $user['school_id'] === (int) $school['id']) {
-        redirectByRoleToLms();
-    }
-}
-
 $loginError = trim($_GET['login_error'] ?? '');
 if ($loginError !== '') {
     $errors[] = $loginError;
@@ -44,7 +37,18 @@ $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 $returnUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . ($_SERVER['REQUEST_URI'] ?? '/');
 $returnUrl = strtok($returnUrl, '?') ?: $returnUrl;
 $schoolCode = $school ? normalizeSchoolCode((string) ($school['school_code'] ?? '')) : '';
+
+$portalFields = ['portal_ts' => 0, 'portal_sig' => ''];
+if ($configError === null && $schoolCode !== '') {
+    try {
+        $portalFields = portalAuthFields($schoolCode);
+    } catch (Throwable $e) {
+        http_response_code(503);
+        $configError = 'Portal sign-in is not configured on the server.';
+    }
+}
 ?>
+<!-- portal-auth-v3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -101,6 +105,8 @@ $schoolCode = $school ? normalizeSchoolCode((string) ($school['school_code'] ?? 
                 <form method="post" action="<?= e(lmsUrl('subdomain-auth.php')) ?>" class="subdomain-form">
                     <input type="hidden" name="school_code" value="<?= e($schoolCode) ?>">
                     <input type="hidden" name="return_url" value="<?= e($returnUrl) ?>">
+                    <input type="hidden" name="portal_ts" value="<?= (int) $portalFields['portal_ts'] ?>">
+                    <input type="hidden" name="portal_sig" value="<?= e($portalFields['portal_sig']) ?>">
                     <div class="form-group">
                         <label for="email">School email</label>
                         <input type="email" id="email" name="email" class="form-control" required autofocus placeholder="you@school.edu">

@@ -63,7 +63,7 @@ function subdomainResolveLmsRoot(string $configured, string $lmsUrl): ?string
 
     if ($configured !== '' && !in_array(strtolower($configured), ['auto', 'detect'], true) && !subdomainIsPlaceholderLmsRoot($configured)) {
         $resolved = realpath($configured);
-        if ($resolved && is_file($resolved . '/includes/bootstrap.php')) {
+        if ($resolved && is_file($resolved . '/includes/subdomain_bootstrap.php')) {
             return str_replace('\\', '/', $resolved);
         }
     }
@@ -75,7 +75,7 @@ function subdomainResolveLmsRoot(string $configured, string $lmsUrl): ?string
 
     foreach (subdomainLmsRootCandidates(str_replace('\\', '/', $docRoot), $lmsUrl) as $candidate) {
         $resolved = realpath($candidate);
-        if ($resolved && is_file($resolved . '/includes/bootstrap.php')) {
+        if ($resolved && is_file($resolved . '/includes/subdomain_bootstrap.php')) {
             return str_replace('\\', '/', $resolved);
         }
     }
@@ -115,7 +115,7 @@ if ($lmsRoot === null) {
     } else {
         foreach ($tried as $path) {
             $exists = is_dir($path) ? 'folder exists' : 'not found';
-            $bootstrap = is_file($path . '/includes/bootstrap.php') ? 'bootstrap OK' : 'no bootstrap';
+            $bootstrap = is_file($path . '/includes/subdomain_bootstrap.php') ? 'bootstrap OK' : 'no bootstrap';
             $lines[] = "  - {$path} ({$exists}, {$bootstrap})";
         }
     }
@@ -126,47 +126,7 @@ if ($lmsRoot === null) {
     exit(implode("\n", $lines));
 }
 
-$bootstrapFile = $lmsRoot . '/includes/bootstrap.php';
-
-function subdomainConfigureSession(array $config): void
-{
-    if (session_status() !== PHP_SESSION_NONE) {
-        return;
-    }
-
-    $domain = trim((string) ($config['session_cookie_domain'] ?? ''));
-    if ($domain === '') {
-        $lmsHost = parse_url((string) ($config['lms_url'] ?? ''), PHP_URL_HOST);
-        if (is_string($lmsHost) && $lmsHost !== '') {
-            $domain = '.' . $lmsHost;
-        }
-    }
-    $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-
-    $params = [
-        'lifetime' => 0,
-        'path' => '/',
-        'domain' => $domain,
-        'secure' => $isSecure,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ];
-
-    if (PHP_VERSION_ID >= 70300) {
-        session_set_cookie_params($params);
-    } else {
-        session_set_cookie_params(
-            $params['lifetime'],
-            $params['path'],
-            $params['domain'],
-            $params['secure'],
-            $params['httponly']
-        );
-    }
-}
-
-subdomainConfigureSession($subdomainConfig);
+$bootstrapFile = $lmsRoot . '/includes/subdomain_bootstrap.php';
 
 require_once $bootstrapFile;
 
@@ -193,22 +153,6 @@ function redirectToLms(string $path): never
 {
     header('Location: ' . lmsUrl($path));
     exit;
-}
-
-function redirectByRoleToLms(): never
-{
-    $user = currentUser();
-    if (!$user) {
-        redirectToLms('login.php');
-    }
-
-    match ($user['role']) {
-        'super_admin'  => redirectToLms('superadmin/dashboard.php'),
-        'school_admin' => redirectToLms('school/dashboard.php'),
-        'teacher'      => redirectToLms('teacher/dashboard.php'),
-        'student'      => redirectToLms('student/dashboard.php'),
-        default        => redirectToLms('login.php'),
-    };
 }
 
 function resolveSubdomainSchool(): ?array

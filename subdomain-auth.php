@@ -7,22 +7,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 
 function subdomainAuthReturnUrlAllowed(string $url): bool
 {
-    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-    if ($host === '') {
-        return false;
-    }
-
-    $allowedHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    if ($allowedHost === '') {
-        return false;
-    }
-
-    if ($host === $allowedHost) {
-        return true;
-    }
-
-    $suffix = '.' . $allowedHost;
-    return str_ends_with($host, $suffix);
+    return portalAuthAllowedHost(strtolower((string) parse_url($url, PHP_URL_HOST)));
 }
 
 function subdomainAuthRedirectBack(string $returnUrl, string $message): never
@@ -41,14 +26,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('login.php');
 }
 
+$returnUrl = trim($_POST['return_url'] ?? '');
+
+if (!verifyPortalAuthRequest()) {
+    subdomainAuthRedirectBack($returnUrl, 'Sign-in must start from your school portal.');
+}
+
+$schoolCode = normalizeSchoolCode($_POST['school_code'] ?? '');
+$portalTs = (int) ($_POST['portal_ts'] ?? 0);
+$portalSig = trim($_POST['portal_sig'] ?? '');
+
+if (!verifyPortalAuthSignature($schoolCode, $portalTs, $portalSig)) {
+    subdomainAuthRedirectBack($returnUrl, 'Your sign-in request expired. Please try again.');
+}
+
 if (isLoggedIn()) {
     redirectByRole();
 }
 
-$schoolCode = normalizeSchoolCode($_POST['school_code'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $password = $_POST['password'] ?? '';
-$returnUrl = trim($_POST['return_url'] ?? '');
 
 $school = $schoolCode !== '' ? resolveLoginSchool(null, 0, $schoolCode) : null;
 
@@ -85,4 +82,5 @@ if (isset($result['error']) && $result['error'] === 'school_inactive') {
 
 recordLoginAttempt($email, true);
 loginUser($result);
+session_write_close();
 redirectByRole();

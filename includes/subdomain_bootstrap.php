@@ -1,14 +1,15 @@
 <?php
+/**
+ * Minimal LMS bootstrap for school subdomain login pages.
+ * Loads env, DB, and school lookup helpers without starting a PHP session.
+ */
+declare(strict_types=1);
 
 require_once __DIR__ . '/env.php';
 require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/security.php';
-
-initSecurity();
-
 require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/cache.php';
+require_once __DIR__ . '/portal_auth.php';
 
 function db(): PDO
 {
@@ -32,13 +33,3 @@ function db(): PDO
 }
 
 require_once __DIR__ . '/auth.php';
-require_once __DIR__ . '/menus.php';
-require_once __DIR__ . '/quiz.php';
-require_once __DIR__ . '/superadmin_school.php';
-require_once __DIR__ . '/subdomain_login.php';
-require_once __DIR__ . '/portal_auth.php';
-
-require_once __DIR__ . '/repositories/ClassRepository.php';
-require_once __DIR__ . '/repositories/QuizRepository.php';
-require_once __DIR__ . '/repositories/DashboardRepository.php';
-require_once __DIR__ . '/repositories/UserRepository.php';

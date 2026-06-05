@@ -16,10 +16,6 @@ return [
 
     // Optional: 'school_slug' => 'my-school',
 
-    // Optional: share session cookie with main site (requires SESSION_COOKIE_DOMAIN in main .env)
-    'session_cookie_domain' => '.kimayco.site',
-    // Main site .env must also set SUBDOMAIN_LOGIN_SECRET (same random string) for login bridge
-
     'portal_title' => null,
     'tagline' => 'Your dedicated learning portal',
     'welcome_message' => 'Sign in with your school email to access courses, materials, assignments, and quizzes.',
