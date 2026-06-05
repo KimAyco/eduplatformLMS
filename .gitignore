@@ -1,0 +1,6 @@
+.env
+.env.production
+storage/logs/*.log
+uploads/*
+!uploads/.gitkeep
+!uploads/.htaccess
