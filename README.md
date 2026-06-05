@@ -57,10 +57,6 @@ Ensure `uploads/` and `storage/logs/` are writable by the web server.
 4. Run `install.php` once, then delete it.
 5. Confirm `.env` is blocked (included `.htaccess` rule).
 
-For per-school login subdomains (e.g. `school.yoursite.com`), copy `school_subdomain/template/` to the subdomain folder, set `config.php`, and upload `subdomain-auth.php` to the main site. The portal form posts sign-in directly to the main domain so sessions work on Hostinger.
-
-See [`school_subdomain/README.md`](school_subdomain/README.md).
-
 ## Features
 
 - **Super Admin** — Approve schools, manage platform
@@ -98,6 +94,4 @@ assets/css/         Moodle-inspired styles
 assets/js/          UI interactions (drawer, toasts)
 uploads/            User uploads (PHP execution blocked)
 storage/logs/       Application logs
-subdomain-login.php Subdomain token bridge (legacy, optional)
-subdomain-auth.php   School subdomain form POST handler (required)
 ```

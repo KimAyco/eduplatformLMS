@@ -1,6 +1,0 @@
-# Deny web access to configuration (copy config.php.example to config.php locally)
-<Files "config.php">
-    Require all denied
-</Files>
-
-DirectoryIndex index.php
