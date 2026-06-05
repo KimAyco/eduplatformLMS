@@ -1,63 +1,75 @@
 <?php
 
-function subdomainLoginSecret(): string
+function ensureSubdomainLoginTokenTable(): void
 {
-    $secret = trim((string) env('SUBDOMAIN_LOGIN_SECRET', ''));
-    if ($secret !== '') {
-        return $secret;
+    static $ready = false;
+    if ($ready) {
+        return;
     }
 
-    $dbPass = (string) env('DB_PASS', '');
-    $dbName = (string) env('DB_NAME', '');
-    if ($dbPass === '' || $dbName === '') {
-        return '';
-    }
+    db()->exec("CREATE TABLE IF NOT EXISTS subdomain_login_tokens (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        user_id INT UNSIGNED NOT NULL,
+        school_id INT UNSIGNED NOT NULL,
+        token_hash CHAR(64) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        used_at DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_subdomain_login_token_hash (token_hash),
+        KEY idx_subdomain_login_expires (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    return hash('sha256', APP_NAME . '|subdomain-bridge|' . $dbName . '|' . $dbPass);
+    $ready = true;
 }
 
 function createSubdomainLoginToken(int $userId, int $schoolId, int $ttlSeconds = 120): string
 {
-    $secret = subdomainLoginSecret();
-    if ($secret === '') {
-        throw new RuntimeException('Subdomain login bridge is not configured.');
-    }
+    ensureSubdomainLoginTokenTable();
 
-    $payload = $userId . '|' . $schoolId . '|' . (time() + $ttlSeconds);
-    $signature = hash_hmac('sha256', $payload, $secret);
+    $token = bin2hex(random_bytes(32));
+    $hash = hash('sha256', $token);
+    $expiresAt = date('Y-m-d H:i:s', time() + $ttlSeconds);
 
-    return rtrim(strtr(base64_encode($payload . '.' . $signature), '+/', '-_'), '=');
+    db()->prepare('INSERT INTO subdomain_login_tokens (user_id, school_id, token_hash, expires_at) VALUES (?, ?, ?, ?)')
+        ->execute([$userId, $schoolId, $hash, $expiresAt]);
+
+    return $token;
 }
 
 function parseSubdomainLoginToken(string $token): ?array
 {
-    $secret = subdomainLoginSecret();
-    if ($secret === '' || $token === '') {
+    if ($token === '') {
         return null;
     }
 
-    $decoded = base64_decode(strtr($token, '-_', '+/'), true);
-    if ($decoded === false || !str_contains($decoded, '.')) {
+    ensureSubdomainLoginTokenTable();
+
+    $hash = hash('sha256', $token);
+    $stmt = db()->prepare('SELECT user_id, school_id FROM subdomain_login_tokens
+        WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW()
+        LIMIT 1');
+    $stmt->execute([$hash]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
         return null;
     }
 
-    [$payload, $signature] = explode('.', $decoded, 2);
-    if (!hash_equals(hash_hmac('sha256', $payload, $secret), $signature)) {
-        return null;
-    }
-
-    $parts = explode('|', $payload);
-    if (count($parts) !== 3) {
-        return null;
-    }
-
-    [$userId, $schoolId, $expiresAt] = $parts;
-    if ((int) $expiresAt < time()) {
-        return null;
-    }
+    db()->prepare('UPDATE subdomain_login_tokens SET used_at = NOW() WHERE token_hash = ?')
+        ->execute([$hash]);
 
     return [
-        'user_id' => (int) $userId,
-        'school_id' => (int) $schoolId,
+        'user_id' => (int) $row['user_id'],
+        'school_id' => (int) $row['school_id'],
     ];
+}
+
+function subdomainLoginBridgeReady(): bool
+{
+    try {
+        ensureSubdomainLoginTokenTable();
+        return true;
+    } catch (Throwable) {
+        return false;
+    }
 }
