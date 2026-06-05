@@ -13,8 +13,11 @@ $quiz = $stmt->fetch();
 
 if (!$quiz) {
     flash('error', 'Quiz not found.');
-    redirect('teacher/quizzes.php');
+    $returnClassId = (int) ($_GET['class_id'] ?? 0);
+    redirect($returnClassId ? 'teacher/course.php?id=' . $returnClassId : 'teacher/dashboard.php');
 }
+
+$returnClassId = (int) ($_GET['class_id'] ?? $quiz['class_id']);
 
 $errors = [];
 
@@ -68,15 +71,20 @@ $questions = QuizRepository::questionsWithOptions($quizId);
 
 $pageTitle = 'Edit Quiz Questions';
 $pageHeading = $quiz['title'] . ' — Questions';
-$activeMenu = 'quizzes';
+$activeMenu = 'dashboard';
 $menuItems = teacherMenu();
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'url' => 'teacher/dashboard.php'],
+    ['label' => $quiz['class_name'], 'url' => 'teacher/course.php?id=' . $returnClassId],
+    ['label' => $quiz['title'], 'url' => 'teacher/quiz-edit.php?id=' . $quizId . '&class_id=' . $returnClassId],
+];
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
 <div class="actions mb-1">
-    <a href="<?= url('teacher/quizzes.php') ?>" class="btn btn-secondary btn-sm">Back to Quizzes</a>
-    <a href="<?= url('teacher/quizzes.php?action=edit&id='.$quizId) ?>" class="btn btn-secondary btn-sm">Quiz Settings</a>
+    <a href="<?= teacherCourseUrl($returnClassId) ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Back to course</a>
+    <a href="<?= teacherCourseUrl($returnClassId, 'action=edit_quiz&item_id=' . $quizId) ?>" class="btn btn-secondary btn-sm">Quiz settings</a>
 </div>
 
 <div class="panel">

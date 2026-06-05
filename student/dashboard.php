@@ -36,21 +36,19 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 <?php else: ?>
 <div class="course-grid">
     <?php foreach ($classes as $c): ?>
-    <div class="course-card">
+    <a href="<?= studentCourseUrl((int) $c['id']) ?>" class="course-card course-card-clickable">
         <div class="course-card-header">
             <h3><?= e($c['name']) ?></h3>
             <?php if ($c['section']): ?><small>Section <?= e($c['section']) ?></small><?php endif; ?>
         </div>
         <div class="course-card-body">
             <?php if ($c['description']): ?><p class="text-muted" style="font-size:.875rem;"><?= e(mb_strimwidth($c['description'], 0, 100, '...')) ?></p><?php else: ?>
-            <p class="text-muted" style="font-size:.875rem;"><?= e($c['academic_year'] ?: 'Course') ?></p><?php endif; ?>
+            <p class="text-muted" style="font-size:.875rem;"><?= e($c['academic_year'] ?: 'Open course') ?></p><?php endif; ?>
         </div>
-        <div class="course-card-actions">
-            <a href="<?= url('student/materials.php?class_id=' . $c['id']) ?>" class="activity-link"><i class="fa-solid fa-file-lines"></i> Materials</a>
-            <a href="<?= url('student/assignments.php') ?>" class="activity-link"><i class="fa-solid fa-pen-to-square"></i> Assignments</a>
-            <a href="<?= url('student/quizzes.php') ?>" class="activity-link"><i class="fa-solid fa-circle-question"></i> Quizzes</a>
+        <div class="course-card-footer">
+            <span class="course-open-link">Open course <i class="fa-solid fa-arrow-right"></i></span>
         </div>
-    </div>
+    </a>
     <?php endforeach; ?>
 </div>
 <?php endif; ?>

@@ -6,6 +6,20 @@ function url(string $path = ''): string
     return BASE_URL . ($path !== '' ? '/' . $path : '');
 }
 
+function teacherCourseUrl(int $classId, string $query = ''): string
+{
+    $url = 'teacher/course.php?id=' . $classId;
+    if ($query !== '') {
+        $url .= '&' . ltrim($query, '&');
+    }
+    return url($url);
+}
+
+function studentCourseUrl(int $classId): string
+{
+    return url('student/course.php?id=' . $classId);
+}
+
 function redirect(string $path): never
 {
     header('Location: ' . url($path));

@@ -72,12 +72,13 @@ if ($assignmentId) {
 
     $pageTitle = $viewAssignment['title'];
     $pageHeading = $viewAssignment['title'];
-    $activeMenu = 'assignments';
+    $activeMenu = 'dashboard';
     $menuItems = studentMenu();
+    $classId = (int) $viewAssignment['class_id'];
     require __DIR__ . '/../includes/layout/dashboard_header.php';
     ?>
 
-    <div class="actions mb-1"><a href="<?= url('student/assignments.php') ?>" class="btn btn-secondary btn-sm">Back</a></div>
+    <div class="actions mb-1"><a href="<?= studentCourseUrl($classId) ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Back to course</a></div>
 
     <div class="panel">
         <p><strong>Class:</strong> <?= e($viewAssignment['class_name']) ?> · <strong>Due:</strong> <?= formatDate($viewAssignment['due_date']) ?> · <strong>Points:</strong> <?= e($viewAssignment['max_points']) ?></p>
