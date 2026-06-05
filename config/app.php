@@ -1,10 +1,34 @@
 <?php
 
+define('APP_ROOT', dirname(__DIR__));
+
+function resolveBaseUrl(): string
+{
+    $docRoot = rtrim(str_replace('\\', '/', (string) realpath($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
+    $appRoot = rtrim(str_replace('\\', '/', (string) realpath(APP_ROOT)), '/');
+
+    $detected = '';
+    if ($docRoot !== '' && $appRoot !== '' && str_starts_with($appRoot, $docRoot)) {
+        $detected = rtrim(substr($appRoot, strlen($docRoot)), '/');
+    }
+
+    $configured = env('BASE_URL');
+    if ($configured === null || $configured === '') {
+        return $detected;
+    }
+
+    $configured = rtrim(str_replace('\\', '/', (string) $configured), '/');
+    if ($docRoot !== '' && is_file($docRoot . $configured . '/assets/css/app.css')) {
+        return $configured;
+    }
+
+    return $detected;
+}
+
 define('APP_NAME', env('APP_NAME', 'EduPlatform'));
 define('APP_ENV', env('APP_ENV', 'local'));
 define('APP_DEBUG', (bool) env('APP_DEBUG', false));
-define('APP_ROOT', dirname(__DIR__));
-define('BASE_URL', env('BASE_URL', ''));
+define('BASE_URL', resolveBaseUrl());
 
 define('UPLOAD_DIR', APP_ROOT . '/uploads');
 define('MAX_UPLOAD_SIZE', 10 * 1024 * 1024);
