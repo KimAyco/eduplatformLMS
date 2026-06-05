@@ -42,7 +42,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     initPasswordToggles();
     initSchoolCodeSuggestion();
+    initCoursePage();
 });
+
+function initCoursePage() {
+    var formPanel = document.getElementById('courseFormPanel');
+    if (formPanel) {
+        formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var firstInput = formPanel.querySelector('input[name="title"], textarea');
+        if (firstInput) {
+            firstInput.focus();
+        }
+    }
+}
 
 function initSchoolCodeSuggestion() {
     var nameInput = document.getElementById('school_name');

@@ -205,6 +205,7 @@ usort($activities, fn ($x, $y) => $y['sort'] <=> $x['sort']);
 $classTitle = $class['name'] . ($class['section'] ? ' — Section ' . $class['section'] : '');
 $pageTitle = $classTitle;
 $pageHeading = $classTitle;
+$hidePageHeader = true;
 $activeMenu = 'dashboard';
 $menuItems = teacherMenu();
 $breadcrumbs = [
@@ -213,171 +214,237 @@ $breadcrumbs = [
 ];
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
+
+$materialCount = count($materials);
+$assignmentCount = count($assignments);
+$quizCount = count($quizzes);
+$activityCount = count($activities);
+$courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
+$formOpen = in_array($action, ['add_material', 'edit_material', 'add_assignment', 'edit_assignment', 'add_quiz', 'edit_quiz'], true);
+$formType = '';
+if (str_contains($action, 'material')) {
+    $formType = 'material';
+} elseif (str_contains($action, 'assignment')) {
+    $formType = 'assignment';
+} elseif (str_contains($action, 'quiz')) {
+    $formType = 'quiz';
+}
 ?>
 
-<div class="course-page-header">
-    <div>
-        <a href="<?= url('teacher/dashboard.php') ?>" class="course-back-link"><i class="fa-solid fa-arrow-left"></i> Back to courses</a>
-        <h2><?= e($class['name']) ?></h2>
-        <?php if ($class['section']): ?><p class="course-page-meta">Section <?= e($class['section']) ?></p><?php endif; ?>
-        <?php if ($class['academic_year']): ?><p class="course-page-meta"><?= e($class['academic_year']) ?></p><?php endif; ?>
-        <?php if ($class['description']): ?><p class="course-page-desc"><?= e($class['description']) ?></p><?php endif; ?>
-    </div>
-</div>
-
-<div class="course-toolbar panel">
-    <h2><i class="fa-solid fa-plus-circle"></i> Add to course</h2>
-    <div class="course-add-actions">
-        <a href="<?= e($courseUrl . '&action=add_material') ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-lines"></i> Material</a>
-        <a href="<?= e($courseUrl . '&action=add_assignment') ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen-to-square"></i> Assignment</a>
-        <a href="<?= e($courseUrl . '&action=add_quiz') ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-circle-question"></i> Quiz</a>
-    </div>
-</div>
-
-<?php if ($action === 'add_material' || $editMaterial): ?>
-<div class="panel">
-    <h2><?= $editMaterial ? 'Edit material' : 'Add material' ?></h2>
-    <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
-    <form method="post" enctype="multipart/form-data">
-        <?= csrfField() ?>
-        <input type="hidden" name="form_action" value="<?= $editMaterial ? 'edit_material' : 'add_material' ?>">
-        <?php if ($editMaterial): ?><input type="hidden" name="material_id" value="<?= (int) $editMaterial['id'] ?>"><?php endif; ?>
-        <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editMaterial['title'] ?? '') ?>" required></div>
-        <div class="form-group"><label>Description</label><textarea name="body" class="form-control"><?= e($editMaterial['body'] ?? '') ?></textarea></div>
-        <div class="form-group"><label>External link</label><input type="url" name="external_link" class="form-control" value="<?= e($editMaterial['external_link'] ?? '') ?>"></div>
-        <div class="form-group">
-            <label>File</label>
-            <input type="file" name="file" class="form-control">
-            <?php if ($editMaterial && $editMaterial['file_path']): ?>
-                <small>Current: <a href="<?= e(uploadUrl($editMaterial['file_path'])) ?>" target="_blank">Download</a></small>
-            <?php endif; ?>
-        </div>
-        <div class="actions">
-            <button type="submit" class="btn btn-primary">Save</button>
-            <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
-        </div>
-    </form>
-</div>
-<?php endif; ?>
-
-<?php if ($action === 'add_assignment' || $editAssignment): ?>
-<div class="panel">
-    <h2><?= $editAssignment ? 'Edit assignment' : 'Create assignment' ?></h2>
-    <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
-    <form method="post">
-        <?= csrfField() ?>
-        <input type="hidden" name="form_action" value="<?= $editAssignment ? 'edit_assignment' : 'add_assignment' ?>">
-        <?php if ($editAssignment): ?><input type="hidden" name="assignment_id" value="<?= (int) $editAssignment['id'] ?>"><?php endif; ?>
-        <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editAssignment['title'] ?? '') ?>" required></div>
-        <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control"><?= e($editAssignment['instructions'] ?? '') ?></textarea></div>
-        <div class="form-row">
-            <div class="form-group"><label>Due date</label><input type="datetime-local" name="due_date" class="form-control" value="<?= e($editAssignment['due_date_local'] ?? '') ?>"></div>
-            <div class="form-group"><label>Max points</label><input type="number" step="0.01" name="max_points" class="form-control" value="<?= e($editAssignment['max_points'] ?? '100') ?>"></div>
-        </div>
-        <div class="form-check"><input type="checkbox" name="allow_late" id="allow_late" <?= ($editAssignment['allow_late'] ?? 0) ? 'checked' : '' ?>><label for="allow_late">Allow late submissions</label></div>
-        <div class="actions">
-            <button type="submit" class="btn btn-primary">Save</button>
-            <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
-        </div>
-    </form>
-</div>
-<?php endif; ?>
-
-<?php if ($action === 'add_quiz' || $editQuiz): ?>
-<div class="panel">
-    <h2><?= $editQuiz ? 'Edit quiz' : 'Create quiz' ?></h2>
-    <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
-    <form method="post">
-        <?= csrfField() ?>
-        <input type="hidden" name="form_action" value="<?= $editQuiz ? 'edit_quiz' : 'add_quiz' ?>">
-        <?php if ($editQuiz): ?><input type="hidden" name="quiz_id" value="<?= (int) $editQuiz['id'] ?>"><?php endif; ?>
-        <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editQuiz['title'] ?? '') ?>" required></div>
-        <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control"><?= e($editQuiz['instructions'] ?? '') ?></textarea></div>
-        <div class="form-row">
-            <div class="form-group"><label>Time limit (minutes)</label><input type="number" name="time_limit_minutes" class="form-control" value="<?= e($editQuiz['time_limit_minutes'] ?? '') ?>" placeholder="Optional"></div>
-            <div class="form-group"><label>Due date</label><input type="datetime-local" name="due_date" class="form-control" value="<?= e($editQuiz['due_date_local'] ?? '') ?>"></div>
-            <div class="form-group"><label>Max attempts</label><input type="number" name="max_attempts" class="form-control" value="<?= e($editQuiz['max_attempts'] ?? '1') ?>" min="1"></div>
-        </div>
-        <div class="actions">
-            <button type="submit" class="btn btn-primary">Save</button>
-            <?php if ($editQuiz): ?><a href="<?= url('teacher/quiz-edit.php?id=' . $editQuiz['id'] . '&class_id=' . $classId) ?>" class="btn btn-secondary">Manage questions</a><?php endif; ?>
-            <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
-        </div>
-    </form>
-</div>
-<?php endif; ?>
-
-<div class="panel">
-    <h2><i class="fa-solid fa-list"></i> Course content</h2>
-    <?php if (empty($activities)): ?>
-        <div class="empty-state" style="padding:2rem 1rem;">
-            <i class="fa-solid fa-folder-open"></i>
-            <h3>No activities yet</h3>
-            <p>Add materials, assignments, or quizzes for your students.</p>
-        </div>
-    <?php else: ?>
-        <ul class="course-module-list">
-            <?php foreach ($activities as $act):
-                $item = $act['item'];
-                if ($act['type'] === 'material'): ?>
-            <li class="course-module-item">
-                <div class="course-module-icon material"><i class="fa-solid fa-file-lines"></i></div>
-                <div class="course-module-body">
-                    <strong><?= e($item['title']) ?></strong>
-                    <span class="course-module-type">Material</span>
-                    <?php if ($item['body']): ?><p class="text-muted"><?= e(mb_strimwidth($item['body'], 0, 120, '...')) ?></p><?php endif; ?>
-                    <div class="course-module-meta">
-                        <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" target="_blank"><i class="fa-solid fa-download"></i> File</a><?php endif; ?>
-                        <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank"><i class="fa-solid fa-link"></i> Link</a><?php endif; ?>
-                        <span><?= formatDate($item['created_at'], 'M j, Y') ?></span>
+<div class="course-view">
+    <section class="course-hero">
+        <div class="course-hero-main">
+            <a href="<?= url('teacher/dashboard.php') ?>" class="course-back-link"><i class="fa-solid fa-arrow-left"></i> My courses</a>
+            <div class="course-hero-title-row">
+                <div class="course-hero-avatar" aria-hidden="true"><?= e($courseInitial) ?></div>
+                <div>
+                    <h1 class="course-hero-title"><?= e($class['name']) ?></h1>
+                    <div class="course-hero-tags">
+                        <?php if ($class['section']): ?><span class="course-tag"><i class="fa-solid fa-layer-group"></i> Section <?= e($class['section']) ?></span><?php endif; ?>
+                        <?php if ($class['academic_year']): ?><span class="course-tag"><i class="fa-solid fa-calendar"></i> <?= e($class['academic_year']) ?></span><?php endif; ?>
                     </div>
                 </div>
-                <div class="course-module-actions">
-                    <a href="<?= e($courseUrl . '&action=edit_material&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
-                    <form method="post" onsubmit="return confirm('Delete this material?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
-                </div>
-            </li>
-                <?php elseif ($act['type'] === 'assignment'): ?>
-            <li class="course-module-item">
-                <div class="course-module-icon assignment"><i class="fa-solid fa-pen-to-square"></i></div>
-                <div class="course-module-body">
-                    <strong><?= e($item['title']) ?></strong>
-                    <span class="course-module-type">Assignment</span>
-                    <div class="course-module-meta">
-                        <span>Due: <?= formatDate($item['due_date']) ?></span>
-                        <span><?= e($item['max_points']) ?> pts</span>
-                        <span><?= (int) $item['submission_count'] ?> submission(s)</span>
+            </div>
+            <?php if ($class['description']): ?><p class="course-hero-desc"><?= e($class['description']) ?></p><?php endif; ?>
+        </div>
+        <div class="course-hero-stats">
+            <div class="course-stat"><strong><?= $activityCount ?></strong><span>Activities</span></div>
+            <div class="course-stat"><strong><?= $materialCount ?></strong><span>Materials</span></div>
+            <div class="course-stat"><strong><?= $assignmentCount ?></strong><span>Assignments</span></div>
+            <div class="course-stat"><strong><?= $quizCount ?></strong><span>Quizzes</span></div>
+        </div>
+    </section>
+
+    <div class="course-layout">
+        <aside class="course-sidebar">
+            <h2 class="course-sidebar-title">Add to course</h2>
+            <p class="course-sidebar-hint">Choose what students will see in this class.</p>
+            <div class="activity-picker">
+                <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="activity-picker-card<?= $formType === 'material' ? ' is-active' : '' ?>">
+                    <span class="activity-picker-icon material"><i class="fa-solid fa-file-lines"></i></span>
+                    <span class="activity-picker-label">Material</span>
+                    <span class="activity-picker-desc">Files, links &amp; notes</span>
+                </a>
+                <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="activity-picker-card<?= $formType === 'assignment' ? ' is-active' : '' ?>">
+                    <span class="activity-picker-icon assignment"><i class="fa-solid fa-pen-to-square"></i></span>
+                    <span class="activity-picker-label">Assignment</span>
+                    <span class="activity-picker-desc">Due dates &amp; submissions</span>
+                </a>
+                <a href="<?= teacherCourseUrl($classId, 'action=add_quiz') ?>" class="activity-picker-card<?= $formType === 'quiz' ? ' is-active' : '' ?>">
+                    <span class="activity-picker-icon quiz"><i class="fa-solid fa-circle-question"></i></span>
+                    <span class="activity-picker-label">Quiz</span>
+                    <span class="activity-picker-desc">Questions &amp; grading</span>
+                </a>
+            </div>
+        </aside>
+
+        <div class="course-main">
+            <?php if ($formOpen): ?>
+            <section class="course-form-sheet course-form-sheet--<?= e($formType) ?>" id="courseFormPanel">
+                <div class="course-form-sheet-header">
+                    <div>
+                        <?php if ($formType === 'material'): ?>
+                            <span class="course-form-sheet-badge material"><i class="fa-solid fa-file-lines"></i> Material</span>
+                            <h2><?= $editMaterial ? 'Edit material' : 'New material' ?></h2>
+                        <?php elseif ($formType === 'assignment'): ?>
+                            <span class="course-form-sheet-badge assignment"><i class="fa-solid fa-pen-to-square"></i> Assignment</span>
+                            <h2><?= $editAssignment ? 'Edit assignment' : 'New assignment' ?></h2>
+                        <?php else: ?>
+                            <span class="course-form-sheet-badge quiz"><i class="fa-solid fa-circle-question"></i> Quiz</span>
+                            <h2><?= $editQuiz ? 'Edit quiz' : 'New quiz' ?></h2>
+                        <?php endif; ?>
                     </div>
+                    <a href="<?= e($courseUrl) ?>" class="course-form-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></a>
                 </div>
-                <div class="course-module-actions">
-                    <a href="<?= url('teacher/grade-submissions.php?assignment_id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Grade</a>
-                    <a href="<?= e($courseUrl . '&action=edit_assignment&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
-                    <form method="post" onsubmit="return confirm('Delete this assignment?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_assignment"><input type="hidden" name="assignment_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
-                </div>
-            </li>
-                <?php else: ?>
-            <li class="course-module-item">
-                <div class="course-module-icon quiz"><i class="fa-solid fa-circle-question"></i></div>
-                <div class="course-module-body">
-                    <strong><?= e($item['title']) ?></strong>
-                    <span class="course-module-type">Quiz</span>
-                    <div class="course-module-meta">
-                        <span><?= (int) $item['question_count'] ?> question(s)</span>
-                        <span><?= (int) $item['attempt_count'] ?> attempt(s)</span>
-                        <span>Due: <?= formatDate($item['due_date']) ?></span>
+                <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
+
+                <?php if ($action === 'add_material' || $editMaterial): ?>
+                <form method="post" enctype="multipart/form-data" class="course-form">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="form_action" value="<?= $editMaterial ? 'edit_material' : 'add_material' ?>">
+                    <?php if ($editMaterial): ?><input type="hidden" name="material_id" value="<?= (int) $editMaterial['id'] ?>"><?php endif; ?>
+                    <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editMaterial['title'] ?? '') ?>" required placeholder="e.g. Week 1 lecture slides"></div>
+                    <div class="form-group"><label>Description</label><textarea name="body" class="form-control" rows="3" placeholder="Optional instructions for students"><?= e($editMaterial['body'] ?? '') ?></textarea></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>External link</label><input type="url" name="external_link" class="form-control" value="<?= e($editMaterial['external_link'] ?? '') ?>" placeholder="https://"></div>
+                        <div class="form-group">
+                            <label>Upload file</label>
+                            <input type="file" name="file" class="form-control">
+                            <?php if ($editMaterial && $editMaterial['file_path']): ?>
+                                <small class="text-muted">Current file: <a href="<?= e(uploadUrl($editMaterial['file_path'])) ?>" target="_blank">Download</a></small>
+                            <?php endif; ?>
+                        </div>
                     </div>
-                </div>
-                <div class="course-module-actions">
-                    <a href="<?= url('teacher/quiz-edit.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-primary">Questions</a>
-                    <a href="<?= url('teacher/quiz-attempts.php?quiz_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Attempts</a>
-                    <a href="<?= e($courseUrl . '&action=edit_quiz&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
-                    <form method="post" onsubmit="return confirm('Delete this quiz?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_quiz"><input type="hidden" name="quiz_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
-                </div>
-            </li>
+                    <div class="course-form-actions">
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save material</button>
+                        <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
                 <?php endif; ?>
-            <?php endforeach; ?>
-        </ul>
-    <?php endif; ?>
+
+                <?php if ($action === 'add_assignment' || $editAssignment): ?>
+                <form method="post" class="course-form">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="form_action" value="<?= $editAssignment ? 'edit_assignment' : 'add_assignment' ?>">
+                    <?php if ($editAssignment): ?><input type="hidden" name="assignment_id" value="<?= (int) $editAssignment['id'] ?>"><?php endif; ?>
+                    <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editAssignment['title'] ?? '') ?>" required placeholder="e.g. Research paper"></div>
+                    <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control" rows="4" placeholder="What should students submit?"><?= e($editAssignment['instructions'] ?? '') ?></textarea></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Due date</label><input type="datetime-local" name="due_date" class="form-control" value="<?= e($editAssignment['due_date_local'] ?? '') ?>"></div>
+                        <div class="form-group"><label>Max points</label><input type="number" step="0.01" name="max_points" class="form-control" value="<?= e($editAssignment['max_points'] ?? '100') ?>"></div>
+                    </div>
+                    <div class="form-check"><input type="checkbox" name="allow_late" id="allow_late" <?= ($editAssignment['allow_late'] ?? 0) ? 'checked' : '' ?>><label for="allow_late">Allow late submissions</label></div>
+                    <div class="course-form-actions">
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save assignment</button>
+                        <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+                <?php endif; ?>
+
+                <?php if ($action === 'add_quiz' || $editQuiz): ?>
+                <form method="post" class="course-form">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="form_action" value="<?= $editQuiz ? 'edit_quiz' : 'add_quiz' ?>">
+                    <?php if ($editQuiz): ?><input type="hidden" name="quiz_id" value="<?= (int) $editQuiz['id'] ?>"><?php endif; ?>
+                    <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editQuiz['title'] ?? '') ?>" required placeholder="e.g. Midterm quiz"></div>
+                    <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control" rows="3"><?= e($editQuiz['instructions'] ?? '') ?></textarea></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Time limit (min)</label><input type="number" name="time_limit_minutes" class="form-control" value="<?= e($editQuiz['time_limit_minutes'] ?? '') ?>" placeholder="Optional"></div>
+                        <div class="form-group"><label>Due date</label><input type="datetime-local" name="due_date" class="form-control" value="<?= e($editQuiz['due_date_local'] ?? '') ?>"></div>
+                        <div class="form-group"><label>Max attempts</label><input type="number" name="max_attempts" class="form-control" value="<?= e($editQuiz['max_attempts'] ?? '1') ?>" min="1"></div>
+                    </div>
+                    <div class="course-form-actions">
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> <?= $editQuiz ? 'Save quiz' : 'Create &amp; add questions' ?></button>
+                        <?php if ($editQuiz): ?><a href="<?= url('teacher/quiz-edit.php?id=' . $editQuiz['id'] . '&class_id=' . $classId) ?>" class="btn btn-secondary">Manage questions</a><?php endif; ?>
+                        <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+                <?php endif; ?>
+            </section>
+            <?php endif; ?>
+
+            <section class="course-content-section">
+                <div class="course-content-header">
+                    <h2><i class="fa-solid fa-book-open"></i> Course content</h2>
+                    <?php if ($activityCount > 0): ?><span class="course-content-count"><?= $activityCount ?> item<?= $activityCount !== 1 ? 's' : '' ?></span><?php endif; ?>
+                </div>
+
+                <?php if (empty($activities)): ?>
+                <div class="course-empty">
+                    <div class="course-empty-icon"><i class="fa-solid fa-folder-open"></i></div>
+                    <h3>Build your course</h3>
+                    <p>Start by adding a material, assignment, or quiz. Everything you add appears here for enrolled students.</p>
+                    <div class="course-empty-actions">
+                        <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="btn btn-primary btn-sm"><i class="fa-solid fa-file-lines"></i> Add material</a>
+                        <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen-to-square"></i> Add assignment</a>
+                    </div>
+                </div>
+                <?php else: ?>
+                <div class="activity-list">
+                    <?php foreach ($activities as $act):
+                        $item = $act['item'];
+                        if ($act['type'] === 'material'): ?>
+                    <article class="activity-card activity-card--material">
+                        <div class="activity-card-icon"><i class="fa-solid fa-file-lines"></i></div>
+                        <div class="activity-card-body">
+                            <span class="activity-card-type">Material</span>
+                            <h3><?= e($item['title']) ?></h3>
+                            <?php if ($item['body']): ?><p><?= e(mb_strimwidth($item['body'], 0, 140, '…')) ?></p><?php endif; ?>
+                            <div class="activity-card-meta">
+                                <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-download"></i> Download</a><?php endif; ?>
+                                <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-link"></i> Open link</a><?php endif; ?>
+                                <span class="activity-meta-chip muted"><i class="fa-regular fa-clock"></i> <?= formatDate($item['created_at'], 'M j, Y') ?></span>
+                            </div>
+                        </div>
+                        <div class="activity-card-actions">
+                            <a href="<?= teacherCourseUrl($classId, 'action=edit_material&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                            <form method="post" onsubmit="return confirm('Delete this material?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
+                        </div>
+                    </article>
+                        <?php elseif ($act['type'] === 'assignment'): ?>
+                    <article class="activity-card activity-card--assignment">
+                        <div class="activity-card-icon"><i class="fa-solid fa-pen-to-square"></i></div>
+                        <div class="activity-card-body">
+                            <span class="activity-card-type">Assignment</span>
+                            <h3><?= e($item['title']) ?></h3>
+                            <div class="activity-card-meta">
+                                <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> Due <?= formatDate($item['due_date'], 'M j, Y') ?></span>
+                                <span class="activity-meta-chip"><i class="fa-solid fa-star"></i> <?= e($item['max_points']) ?> pts</span>
+                                <span class="activity-meta-chip"><i class="fa-solid fa-inbox"></i> <?= (int) $item['submission_count'] ?> submitted</span>
+                            </div>
+                        </div>
+                        <div class="activity-card-actions">
+                            <a href="<?= url('teacher/grade-submissions.php?assignment_id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Grade</a>
+                            <a href="<?= teacherCourseUrl($classId, 'action=edit_assignment&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                            <form method="post" onsubmit="return confirm('Delete this assignment?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_assignment"><input type="hidden" name="assignment_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
+                        </div>
+                    </article>
+                        <?php else: ?>
+                    <article class="activity-card activity-card--quiz">
+                        <div class="activity-card-icon"><i class="fa-solid fa-circle-question"></i></div>
+                        <div class="activity-card-body">
+                            <span class="activity-card-type">Quiz</span>
+                            <h3><?= e($item['title']) ?></h3>
+                            <div class="activity-card-meta">
+                                <span class="activity-meta-chip"><i class="fa-solid fa-list"></i> <?= (int) $item['question_count'] ?> questions</span>
+                                <span class="activity-meta-chip"><i class="fa-solid fa-users"></i> <?= (int) $item['attempt_count'] ?> attempts</span>
+                                <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> Due <?= formatDate($item['due_date'], 'M j, Y') ?></span>
+                            </div>
+                        </div>
+                        <div class="activity-card-actions">
+                            <a href="<?= url('teacher/quiz-edit.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-primary">Questions</a>
+                            <a href="<?= url('teacher/quiz-attempts.php?quiz_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Attempts</a>
+                            <a href="<?= teacherCourseUrl($classId, 'action=edit_quiz&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                            <form method="post" onsubmit="return confirm('Delete this quiz?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_quiz"><input type="hidden" name="quiz_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
+                        </div>
+                    </article>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </section>
+        </div>
+    </div>
 </div>
 
 <?php require __DIR__ . '/../includes/layout/dashboard_footer.php'; ?>

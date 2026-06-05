@@ -59,9 +59,11 @@ $initials = userInitials($user);
 
         <main class="moodle-main">
             <?php require __DIR__ . '/breadcrumbs.php'; ?>
+            <?php if (empty($hidePageHeader)): ?>
             <div class="page-header">
                 <h1><?= e($pageHeading ?? $pageTitle ?? '') ?></h1>
             </div>
+            <?php endif; ?>
 
             <div id="toastContainer" class="toast-container">
                 <?php foreach (getFlashes() as $type => $messages): ?>

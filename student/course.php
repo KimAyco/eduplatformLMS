@@ -50,6 +50,7 @@ usort($activities, fn ($x, $y) => $y['sort'] <=> $x['sort']);
 $classTitle = $class['name'] . ($class['section'] ? ' — Section ' . $class['section'] : '');
 $pageTitle = $classTitle;
 $pageHeading = $classTitle;
+$hidePageHeader = true;
 $activeMenu = 'dashboard';
 $menuItems = studentMenu();
 $breadcrumbs = [
@@ -58,86 +59,105 @@ $breadcrumbs = [
 ];
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
+
+$activityCount = count($activities);
+$courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
 ?>
 
-<div class="course-page-header">
-    <div>
-        <a href="<?= url('student/dashboard.php') ?>" class="course-back-link"><i class="fa-solid fa-arrow-left"></i> Back to courses</a>
-        <h2><?= e($class['name']) ?></h2>
-        <?php if ($class['section']): ?><p class="course-page-meta">Section <?= e($class['section']) ?></p><?php endif; ?>
-        <?php if ($class['academic_year']): ?><p class="course-page-meta"><?= e($class['academic_year']) ?></p><?php endif; ?>
-        <?php if ($class['description']): ?><p class="course-page-desc"><?= e($class['description']) ?></p><?php endif; ?>
-    </div>
-</div>
-
-<div class="panel">
-    <h2><i class="fa-solid fa-list"></i> Course content</h2>
-    <?php if (empty($activities)): ?>
-        <div class="empty-state" style="padding:2rem 1rem;">
-            <i class="fa-solid fa-folder-open"></i>
-            <h3>No content yet</h3>
-            <p>Your teacher has not added any materials or activities.</p>
+<div class="course-view course-view--student">
+    <section class="course-hero">
+        <div class="course-hero-main">
+            <a href="<?= url('student/dashboard.php') ?>" class="course-back-link"><i class="fa-solid fa-arrow-left"></i> My courses</a>
+            <div class="course-hero-title-row">
+                <div class="course-hero-avatar" aria-hidden="true"><?= e($courseInitial) ?></div>
+                <div>
+                    <h1 class="course-hero-title"><?= e($class['name']) ?></h1>
+                    <div class="course-hero-tags">
+                        <?php if ($class['section']): ?><span class="course-tag"><i class="fa-solid fa-layer-group"></i> Section <?= e($class['section']) ?></span><?php endif; ?>
+                        <?php if ($class['academic_year']): ?><span class="course-tag"><i class="fa-solid fa-calendar"></i> <?= e($class['academic_year']) ?></span><?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php if ($class['description']): ?><p class="course-hero-desc"><?= e($class['description']) ?></p><?php endif; ?>
         </div>
-    <?php else: ?>
-        <ul class="course-module-list">
+        <div class="course-hero-stats">
+            <div class="course-stat"><strong><?= $activityCount ?></strong><span>Activities</span></div>
+        </div>
+    </section>
+
+    <section class="course-content-section course-content-section--full">
+        <div class="course-content-header">
+            <h2><i class="fa-solid fa-book-open"></i> Course content</h2>
+            <?php if ($activityCount > 0): ?><span class="course-content-count"><?= $activityCount ?> item<?= $activityCount !== 1 ? 's' : '' ?></span><?php endif; ?>
+        </div>
+
+        <?php if (empty($activities)): ?>
+        <div class="course-empty">
+            <div class="course-empty-icon"><i class="fa-solid fa-folder-open"></i></div>
+            <h3>Nothing here yet</h3>
+            <p>Your teacher has not published any materials or activities for this class.</p>
+        </div>
+        <?php else: ?>
+        <div class="activity-list">
             <?php foreach ($activities as $act):
                 $item = $act['item'];
                 if ($act['type'] === 'material'): ?>
-            <li class="course-module-item">
-                <div class="course-module-icon material"><i class="fa-solid fa-file-lines"></i></div>
-                <div class="course-module-body">
-                    <strong><?= e($item['title']) ?></strong>
-                    <span class="course-module-type">Material</span>
-                    <?php if ($item['body']): ?><p class="text-muted"><?= e($item['body']) ?></p><?php endif; ?>
-                    <div class="course-module-meta">
-                        <span>By <?= e($item['teacher_first'] . ' ' . $item['teacher_last']) ?></span>
-                        <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" target="_blank"><i class="fa-solid fa-download"></i> Download file</a><?php endif; ?>
-                        <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank"><i class="fa-solid fa-link"></i> Open link</a><?php endif; ?>
+            <article class="activity-card activity-card--material">
+                <div class="activity-card-icon"><i class="fa-solid fa-file-lines"></i></div>
+                <div class="activity-card-body">
+                    <span class="activity-card-type">Material</span>
+                    <h3><?= e($item['title']) ?></h3>
+                    <?php if ($item['body']): ?><p><?= e($item['body']) ?></p><?php endif; ?>
+                    <div class="activity-card-meta">
+                        <span class="activity-meta-chip muted"><i class="fa-solid fa-user"></i> <?= e($item['teacher_first'] . ' ' . $item['teacher_last']) ?></span>
+                        <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-download"></i> Download</a><?php endif; ?>
+                        <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-link"></i> Open link</a><?php endif; ?>
                     </div>
                 </div>
-            </li>
+            </article>
                 <?php elseif ($act['type'] === 'assignment'): ?>
-            <li class="course-module-item">
-                <div class="course-module-icon assignment"><i class="fa-solid fa-pen-to-square"></i></div>
-                <div class="course-module-body">
-                    <strong><?= e($item['title']) ?></strong>
-                    <span class="course-module-type">Assignment</span>
-                    <div class="course-module-meta">
-                        <span>Due: <?= formatDate($item['due_date']) ?></span>
-                        <span><?= e($item['max_points']) ?> pts</span>
+            <article class="activity-card activity-card--assignment">
+                <div class="activity-card-icon"><i class="fa-solid fa-pen-to-square"></i></div>
+                <div class="activity-card-body">
+                    <span class="activity-card-type">Assignment</span>
+                    <h3><?= e($item['title']) ?></h3>
+                    <div class="activity-card-meta">
+                        <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> Due <?= formatDate($item['due_date'], 'M j, Y') ?></span>
+                        <span class="activity-meta-chip"><i class="fa-solid fa-star"></i> <?= e($item['max_points']) ?> pts</span>
                         <?php if ($item['my_status']): ?>
                             <span class="badge badge-<?= e($item['my_status']) ?>"><?= e(ucfirst(str_replace('_', ' ', $item['my_status']))) ?></span>
-                            <?php if ($item['my_grade'] !== null): ?><span>Grade: <?= e($item['my_grade']) ?></span><?php endif; ?>
+                            <?php if ($item['my_grade'] !== null): ?><span class="activity-meta-chip"><i class="fa-solid fa-check"></i> Grade: <?= e($item['my_grade']) ?></span><?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
-                <div class="course-module-actions">
-                    <a href="<?= url('student/assignments.php?id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Open</a>
+                <div class="activity-card-actions">
+                    <a href="<?= url('student/assignments.php?id=' . $item['id']) ?>" class="btn btn-sm btn-primary"><?= $item['my_status'] ? 'View' : 'Submit' ?></a>
                 </div>
-            </li>
+            </article>
                 <?php else: ?>
-            <li class="course-module-item">
-                <div class="course-module-icon quiz"><i class="fa-solid fa-circle-question"></i></div>
-                <div class="course-module-body">
-                    <strong><?= e($item['title']) ?></strong>
-                    <span class="course-module-type">Quiz</span>
-                    <div class="course-module-meta">
-                        <span><?= (int) $item['question_count'] ?> question(s)</span>
-                        <span>Due: <?= formatDate($item['due_date']) ?></span>
+            <article class="activity-card activity-card--quiz">
+                <div class="activity-card-icon"><i class="fa-solid fa-circle-question"></i></div>
+                <div class="activity-card-body">
+                    <span class="activity-card-type">Quiz</span>
+                    <h3><?= e($item['title']) ?></h3>
+                    <div class="activity-card-meta">
+                        <span class="activity-meta-chip"><i class="fa-solid fa-list"></i> <?= (int) $item['question_count'] ?> questions</span>
+                        <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> Due <?= formatDate($item['due_date'], 'M j, Y') ?></span>
                         <?php if ($item['my_attempt_status']): ?><span class="badge badge-submitted"><?= e(ucfirst(str_replace('_', ' ', $item['my_attempt_status']))) ?></span><?php endif; ?>
                     </div>
                 </div>
-                <div class="course-module-actions">
+                <div class="activity-card-actions">
                     <a href="<?= url('student/quiz-take.php?quiz_id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Take quiz</a>
                     <?php if ($item['my_attempt_status'] && $item['my_attempt_status'] !== 'in_progress'): ?>
                     <a href="<?= url('student/quiz-results.php?quiz_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Results</a>
                     <?php endif; ?>
                 </div>
-            </li>
+            </article>
                 <?php endif; ?>
             <?php endforeach; ?>
-        </ul>
-    <?php endif; ?>
+        </div>
+        <?php endif; ?>
+    </section>
 </div>
 
 <?php require __DIR__ . '/../includes/layout/dashboard_footer.php'; ?>
