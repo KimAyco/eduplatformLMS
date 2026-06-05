@@ -55,3 +55,4 @@ define('SCHOOL_STATUSES', [
 define('SESSION_LIFETIME', (int) env('SESSION_LIFETIME', 7200));
 define('LOGIN_MAX_ATTEMPTS', (int) env('LOGIN_MAX_ATTEMPTS', 5));
 define('LOGIN_LOCKOUT_MINUTES', (int) env('LOGIN_LOCKOUT_MINUTES', 15));
+define('SESSION_COOKIE_DOMAIN', trim((string) env('SESSION_COOKIE_DOMAIN', '')));

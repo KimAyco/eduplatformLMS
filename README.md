@@ -57,6 +57,8 @@ Ensure `uploads/` and `storage/logs/` are writable by the web server.
 4. Run `install.php` once, then delete it.
 5. Confirm `.env` is blocked (included `.htaccess` rule).
 
+For per-school login subdomains (e.g. `school.yoursite.com`), deploy a separate portal that loads this LMS and set `SUBDOMAIN_LOGIN_SECRET` plus optional `SESSION_COOKIE_DOMAIN` in `.env`. The main site exposes `subdomain-login.php` to complete sign-in after subdomain authentication.
+
 ## Features
 
 - **Super Admin** — Approve schools, manage platform
@@ -94,4 +96,5 @@ assets/css/         Moodle-inspired styles
 assets/js/          UI interactions (drawer, toasts)
 uploads/            User uploads (PHP execution blocked)
 storage/logs/       Application logs
+subdomain-login.php Subdomain portal sign-in bridge (optional)
 ```

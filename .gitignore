@@ -4,3 +4,4 @@ storage/logs/*.log
 uploads/*
 !uploads/.gitkeep
 !uploads/.htaccess
+school_subdomain/

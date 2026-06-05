@@ -24,6 +24,11 @@ function initSecurity(): void
         ini_set('session.cookie_secure', '1');
     }
 
+    $cookieDomain = SESSION_COOKIE_DOMAIN;
+    if ($cookieDomain !== '') {
+        ini_set('session.cookie_domain', $cookieDomain);
+    }
+
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }

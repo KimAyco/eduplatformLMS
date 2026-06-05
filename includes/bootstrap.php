@@ -35,6 +35,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/menus.php';
 require_once __DIR__ . '/quiz.php';
 require_once __DIR__ . '/superadmin_school.php';
+require_once __DIR__ . '/subdomain_login.php';
 
 require_once __DIR__ . '/repositories/ClassRepository.php';
 require_once __DIR__ . '/repositories/QuizRepository.php';
