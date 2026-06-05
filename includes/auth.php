@@ -57,6 +57,27 @@ function logoutUser(): void
     session_destroy();
 }
 
+function logoutRedirectPath(?array $user = null): string
+{
+    $user ??= currentUser();
+    if ($user === null) {
+        return 'login.php';
+    }
+
+    if ($user['role'] === 'super_admin') {
+        return 'superadmin/login.php';
+    }
+
+    if (!empty($user['school_id'])) {
+        $code = getSchoolCode((int) $user['school_id']);
+        if ($code !== '') {
+            return 'login.php?code=' . urlencode(normalizeSchoolCode($code));
+        }
+    }
+
+    return 'login.php';
+}
+
 function requireLogin(): void
 {
     if (!isLoggedIn()) {
