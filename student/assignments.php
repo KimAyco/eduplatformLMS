@@ -12,7 +12,8 @@ if ($assignmentId && $_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
 
     $stmt = db()->prepare('SELECT a.* FROM assignments a
-        INNER JOIN class_students cs ON cs.class_id = a.class_id AND cs.student_id = ?
+        INNER JOIN classes c ON c.id = a.class_id
+        INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
         WHERE a.id = ?');
     $stmt->execute([$user['id'], $assignmentId]);
     $assignment = $stmt->fetch();
@@ -54,9 +55,10 @@ if ($assignmentId && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($assignmentId) {
-    $stmt = db()->prepare('SELECT a.*, c.name AS class_name FROM assignments a
-        INNER JOIN class_students cs ON cs.class_id = a.class_id AND cs.student_id = ?
+    $stmt = db()->prepare('SELECT a.*, c.name AS class_name, g.name AS group_name FROM assignments a
         INNER JOIN classes c ON c.id = a.class_id
+        INNER JOIN class_groups g ON g.id = c.class_group_id
+        INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
         WHERE a.id = ?');
     $stmt->execute([$user['id'], $assignmentId]);
     $viewAssignment = $stmt->fetch();
@@ -81,7 +83,7 @@ if ($assignmentId) {
     <div class="actions mb-1"><a href="<?= studentCourseUrl($classId) ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Back to course</a></div>
 
     <div class="panel">
-        <p><strong>Class:</strong> <?= e($viewAssignment['class_name']) ?> · <strong>Due:</strong> <?= formatDate($viewAssignment['due_date']) ?> · <strong>Points:</strong> <?= e($viewAssignment['max_points']) ?></p>
+        <p><strong>Class:</strong> <?= e(classDisplayName($viewAssignment)) ?> · <strong>Due:</strong> <?= formatDate($viewAssignment['due_date']) ?> · <strong>Points:</strong> <?= e($viewAssignment['max_points']) ?></p>
         <?php if ($viewAssignment['instructions']): ?><div class="mt-1"><?= nl2br(e($viewAssignment['instructions'])) ?></div><?php endif; ?>
     </div>
 
@@ -115,10 +117,11 @@ if ($assignmentId) {
     exit;
 }
 
-$stmt = db()->prepare('SELECT a.*, c.name AS class_name, s.id AS submission_id, s.status AS submission_status, s.grade
+$stmt = db()->prepare('SELECT a.*, c.name AS class_name, g.name AS group_name, s.id AS submission_id, s.status AS submission_status, s.grade
     FROM assignments a
-    INNER JOIN class_students cs ON cs.class_id = a.class_id AND cs.student_id = ?
     INNER JOIN classes c ON c.id = a.class_id
+    INNER JOIN class_groups g ON g.id = c.class_group_id
+    INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
     LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.student_id = ?
     ORDER BY a.due_date ASC');
 $stmt->execute([$user['id'], $user['id']]);
@@ -141,7 +144,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <?php else: foreach ($assignments as $a): ?>
             <tr>
                 <td><?= e($a['title']) ?></td>
-                <td><?= e($a['class_name']) ?></td>
+                <td><?= e(classDisplayName($a)) ?></td>
                 <td><?= formatDate($a['due_date']) ?></td>
                 <td>
                     <?php if (!$a['submission_id']): ?>

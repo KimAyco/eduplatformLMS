@@ -15,15 +15,29 @@ $menuItems = teacherMenu();
 $breadcrumbs = [
     ['label' => 'Dashboard', 'url' => 'teacher/dashboard.php'],
 ];
+$welcomeSubtitle = 'Manage your teaching courses and grade student work.';
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
+require __DIR__ . '/../includes/layout/dashboard_welcome.php';
 ?>
 
 <div class="stats-grid">
-    <div class="stat-card"><i class="fa-solid fa-book-open"></i><div><div class="value"><?= $stats['classes'] ?></div><div class="label">Courses</div></div></div>
-    <div class="stat-card"><i class="fa-solid fa-file-lines"></i><div><div class="value"><?= $stats['materials'] ?></div><div class="label">Materials</div></div></div>
-    <div class="stat-card"><i class="fa-solid fa-pen-to-square"></i><div><div class="value"><?= $stats['assignments'] ?></div><div class="label">Assignments</div></div></div>
-    <div class="stat-card"><i class="fa-solid fa-circle-question"></i><div><div class="value"><?= $stats['quizzes'] ?></div><div class="label">Quizzes</div></div></div>
+    <div class="stat-card">
+        <div class="stat-card-icon stat-card-icon-blue"><i class="fa-solid fa-book-open"></i></div>
+        <div><div class="value"><?= $stats['classes'] ?></div><div class="label">Courses</div><div class="stat-card-term">This term</div></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-icon stat-card-icon-green"><i class="fa-solid fa-file-lines"></i></div>
+        <div><div class="value"><?= $stats['materials'] ?></div><div class="label">Materials</div><div class="stat-card-term">This term</div></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-icon stat-card-icon-orange"><i class="fa-solid fa-pen-to-square"></i></div>
+        <div><div class="value"><?= $stats['assignments'] ?></div><div class="label">Assignments</div><div class="stat-card-term">This term</div></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-icon stat-card-icon-purple"><i class="fa-solid fa-circle-question"></i></div>
+        <div><div class="value"><?= $stats['quizzes'] ?></div><div class="label">Quizzes</div><div class="stat-card-term">This term</div></div>
+    </div>
 </div>
 
 <h2 class="mb-1" style="font-size:1.1rem;font-weight:700;">Teaching courses</h2>
@@ -40,10 +54,10 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
     <a href="<?= teacherCourseUrl((int) $c['id']) ?>" class="course-card course-card-clickable">
         <div class="course-card-header">
             <h3><?= e($c['name']) ?></h3>
-            <?php if ($c['section']): ?><small>Section <?= e($c['section']) ?></small><?php endif; ?>
+            <?php if ($c['group_name']): ?><small><?= e($c['group_name']) ?></small><?php endif; ?>
         </div>
         <div class="course-card-body">
-            <p class="text-muted" style="font-size:.875rem;"><?= e($c['academic_year'] ?: 'Open course') ?></p>
+            <p class="text-muted" style="font-size:.875rem;"><?= e($c['group_academic_year'] ?: 'Open course') ?></p>
         </div>
         <div class="course-card-footer">
             <span class="course-open-link">Open course <i class="fa-solid fa-arrow-right"></i></span>

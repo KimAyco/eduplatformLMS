@@ -6,8 +6,10 @@ requireSchoolActive();
 $user = currentUser();
 $quizId = (int) ($_GET['id'] ?? 0);
 
-$stmt = db()->prepare('SELECT q.*, c.name AS class_name FROM quizzes q
-    INNER JOIN classes c ON c.id = q.class_id WHERE q.id = ? AND q.teacher_id = ?');
+$stmt = db()->prepare('SELECT q.*, c.name AS class_name, g.name AS group_name FROM quizzes q
+    INNER JOIN classes c ON c.id = q.class_id
+    INNER JOIN class_groups g ON g.id = c.class_group_id
+    WHERE q.id = ? AND q.teacher_id = ?');
 $stmt->execute([$quizId, $user['id']]);
 $quiz = $stmt->fetch();
 
@@ -71,11 +73,11 @@ $questions = QuizRepository::questionsWithOptions($quizId);
 
 $pageTitle = 'Edit Quiz Questions';
 $pageHeading = $quiz['title'] . ' — Questions';
-$activeMenu = 'dashboard';
+$activeMenu = 'classes';
 $menuItems = teacherMenu();
 $breadcrumbs = [
     ['label' => 'Dashboard', 'url' => 'teacher/dashboard.php'],
-    ['label' => $quiz['class_name'], 'url' => 'teacher/course.php?id=' . $returnClassId],
+    ['label' => classDisplayName($quiz), 'url' => 'teacher/course.php?id=' . $returnClassId],
     ['label' => $quiz['title'], 'url' => 'teacher/quiz-edit.php?id=' . $quizId . '&class_id=' . $returnClassId],
 ];
 
@@ -88,7 +90,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 </div>
 
 <div class="panel">
-    <p><strong>Class:</strong> <?= e($quiz['class_name']) ?> · <strong>Total Points:</strong> <?= getQuizTotalPoints($quizId) ?> · <strong>Time Limit:</strong> <?= $quiz['time_limit_minutes'] ? e($quiz['time_limit_minutes']) . ' min' : 'None' ?></p>
+    <p><strong>Class:</strong> <?= e(classDisplayName($quiz)) ?> · <strong>Total Points:</strong> <?= getQuizTotalPoints($quizId) ?> · <strong>Time Limit:</strong> <?= $quiz['time_limit_minutes'] ? e($quiz['time_limit_minutes']) . ' min' : 'None' ?></p>
 </div>
 
 <div class="panel">

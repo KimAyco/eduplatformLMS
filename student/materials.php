@@ -10,12 +10,13 @@ $filterClass = (int) ($_GET['class_id'] ?? 0);
 
 $materials = [];
 if (!empty($classIds)) {
-    $sql = 'SELECT m.*, c.name AS class_name, c.section, u.first_name AS teacher_first, u.last_name AS teacher_last
+    $sql = 'SELECT m.*, c.name AS class_name, g.name AS group_name, u.first_name AS teacher_first, u.last_name AS teacher_last
             FROM materials m
             INNER JOIN classes c ON c.id = m.class_id
-            INNER JOIN class_students cs ON cs.class_id = c.id AND cs.student_id = ?
+            INNER JOIN class_groups g ON g.id = c.class_group_id
+            INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
             INNER JOIN users u ON u.id = m.teacher_id
-            WHERE cs.student_id = ?';
+            WHERE cgs.student_id = ?';
     $params = [$user['id'], $user['id']];
     if ($filterClass && in_array($filterClass, $classIds)) {
         $sql .= ' AND m.class_id = ?';
@@ -41,7 +42,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <select name="class_id" class="form-control" onchange="this.form.submit()">
             <option value="">All classes</option>
             <?php foreach ($classes as $c): ?>
-                <option value="<?= $c['id'] ?>" <?= $filterClass === (int)$c['id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+                <option value="<?= $c['id'] ?>" <?= $filterClass === (int)$c['id'] ? 'selected' : '' ?>><?= e(classDisplayName($c)) ?></option>
             <?php endforeach; ?>
         </select>
     </form>
@@ -57,7 +58,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <?php else: foreach ($materials as $m): ?>
             <tr>
                 <td><strong><?= e($m['title']) ?></strong><?php if ($m['body']): ?><br><small class="text-muted"><?= e(mb_strimwidth($m['body'], 0, 80, '...')) ?></small><?php endif; ?></td>
-                <td><?= e($m['class_name']) ?></td>
+                <td><?= e(classDisplayName($m)) ?></td>
                 <td><?= e($m['teacher_first'] . ' ' . $m['teacher_last']) ?></td>
                 <td>
                     <?php if ($m['file_path']): ?><a href="<?= e(uploadUrl($m['file_path'])) ?>" target="_blank">Download</a><?php endif; ?>

@@ -5,12 +5,13 @@ requireSchoolActive();
 
 $user = currentUser();
 
-$stmt = db()->prepare('SELECT q.*, c.name AS class_name,
+$stmt = db()->prepare('SELECT q.*, c.name AS class_name, g.name AS group_name,
     (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id AND student_id = ? AND status != ?) AS attempt_count,
     (SELECT MAX(score) FROM quiz_attempts WHERE quiz_id = q.id AND student_id = ? AND status != ?) AS best_score
     FROM quizzes q
-    INNER JOIN class_students cs ON cs.class_id = q.class_id AND cs.student_id = ?
     INNER JOIN classes c ON c.id = q.class_id
+    INNER JOIN class_groups g ON g.id = c.class_group_id
+    INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
     ORDER BY q.due_date ASC, q.created_at DESC');
 $stmt->execute([$user['id'], 'in_progress', $user['id'], 'in_progress', $user['id']]);
 $quizzes = $stmt->fetchAll();
@@ -33,7 +34,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <?php $can = canStudentTakeQuiz($q, $user['id']); ?>
             <tr>
                 <td><?= e($q['title']) ?></td>
-                <td><?= e($q['class_name']) ?></td>
+                <td><?= e(classDisplayName($q)) ?></td>
                 <td><?= formatDate($q['due_date']) ?></td>
                 <td><?= (int)$q['attempt_count'] ?> / <?= (int)$q['max_attempts'] ?></td>
                 <td><?= $q['best_score'] !== null ? e($q['best_score']) . ' / ' . getQuizTotalPoints($q['id']) : '—' ?></td>

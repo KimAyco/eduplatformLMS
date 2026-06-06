@@ -90,6 +90,10 @@ $pager = paginate($list['total'], $list['page'], $list['per_page']);
 
 $pageTitle = 'Students';
 $pageHeading = 'Students';
+$pageSubtitle = 'Manage student accounts and enroll them in class groups.';
+$pageActionUrl = ($action === 'add' || $editUser) ? null : 'school/students.php?action=add';
+$pageActionLabel = ($action === 'add' || $editUser) ? null : 'Add Student';
+$pageActionIcon = 'fa-user-plus';
 $activeMenu = 'students';
 $menuItems = schoolAdminMenu();
 $breadcrumbs = [
@@ -101,6 +105,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
 <?php if ($action === 'add' || $editUser): ?>
+<div class="admin-form-card">
 <div class="panel">
     <h2><?= $editUser ? 'Edit Student' : 'Add Student' ?></h2>
     <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
@@ -123,34 +128,32 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         </div>
     </form>
 </div>
-<?php else: ?>
-<div class="panel-header" style="margin-bottom:1rem;">
-    <h2>All Students</h2>
-    <a href="<?= url('school/students.php?action=add') ?>" class="btn btn-primary btn-sm">Add Student</a>
 </div>
-<?php endif; ?>
-
+<?php elseif (empty($students)): ?>
+<?= adminEmptyState('fa-user-graduate', 'No students yet', 'Add students, then enroll them in a class group.', 'school/students.php?action=add', 'Add student') ?>
+<?php else: ?>
+<div class="admin-table-card">
 <div class="table-wrap">
     <table>
         <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
-        <?php if (empty($students)): ?>
-            <tr><td colspan="4" class="text-muted">No students yet.</td></tr>
-        <?php else: foreach ($students as $s): ?>
+        <?php foreach ($students as $s): ?>
             <tr>
-                <td><?= e($s['first_name'] . ' ' . $s['last_name']) ?></td>
+                <td><?= tableUserCell($s['first_name'], $s['last_name']) ?></td>
                 <td><?= e($s['email']) ?></td>
                 <td><span class="badge badge-<?= $s['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($s['status'])) ?></span></td>
                 <td class="actions">
                     <a href="<?= url('school/students.php?action=edit&id=' . $s['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
                     <form method="post" style="display:inline"><?= csrfField() ?><input type="hidden" name="form_action" value="toggle"><input type="hidden" name="user_id" value="<?= $s['id'] ?>"><button class="btn btn-sm btn-secondary"><?= $s['status'] === 'active' ? 'Deactivate' : 'Activate' ?></button></form>
-                    <form method="post" style="display:inline" onsubmit="return confirm('Delete this student?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete"><input type="hidden" name="user_id" value="<?= $s['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
+                    <form method="post" style="display:inline" data-confirm="Delete this student?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete"><input type="hidden" name="user_id" value="<?= $s['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
                 </td>
             </tr>
-        <?php endforeach; endif; ?>
+        <?php endforeach; ?>
         </tbody>
     </table>
 </div>
+</div>
 <?= renderPagination($pager, 'school/students.php') ?>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/layout/dashboard_footer.php'; ?>

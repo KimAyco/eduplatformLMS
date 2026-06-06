@@ -36,6 +36,8 @@ require_once __DIR__ . '/menus.php';
 require_once __DIR__ . '/quiz.php';
 require_once __DIR__ . '/superadmin_school.php';
 
+require_once __DIR__ . '/repositories/ClassGroupRepository.php';
+require_once __DIR__ . '/repositories/SubjectRepository.php';
 require_once __DIR__ . '/repositories/ClassRepository.php';
 require_once __DIR__ . '/repositories/QuizRepository.php';
 require_once __DIR__ . '/repositories/DashboardRepository.php';

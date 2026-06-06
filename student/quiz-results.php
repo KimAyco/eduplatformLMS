@@ -10,7 +10,8 @@ $quizId = (int) ($_GET['quiz_id'] ?? 0);
 if ($attemptId) {
     $stmt = db()->prepare('SELECT qa.*, q.title, q.id AS quiz_id FROM quiz_attempts qa
         INNER JOIN quizzes q ON q.id = qa.quiz_id
-        INNER JOIN class_students cs ON cs.class_id = q.class_id AND cs.student_id = ?
+        INNER JOIN classes c ON c.id = q.class_id
+        INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
         WHERE qa.id = ? AND qa.student_id = ?');
     $stmt->execute([$user['id'], $attemptId, $user['id']]);
     $attempt = $stmt->fetch();

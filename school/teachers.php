@@ -7,6 +7,8 @@ $sid = schoolId();
 $action = $_GET['action'] ?? '';
 $editId = (int) ($_GET['id'] ?? 0);
 $errors = [];
+$catalogSubjects = SubjectRepository::forSchool($sid);
+$selectedSubjectIds = array_map('intval', $_POST['subject_ids'] ?? []);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
@@ -16,12 +18,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $userId = (int) ($_POST['user_id'] ?? 0);
+    $selectedSubjectIds = array_map('intval', $_POST['subject_ids'] ?? []);
 
-    if ($firstName === '' || $lastName === '') $errors[] = 'First and last name are required.';
-    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email is required.';
+    if ($firstName === '' || $lastName === '') {
+        $errors[] = 'First and last name are required.';
+    }
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Valid email is required.';
+    }
+    if (empty($catalogSubjects) && in_array($postAction, ['add', 'edit'], true)) {
+        $errors[] = 'Add subjects to the catalog before assigning teachers.';
+    } elseif (in_array($postAction, ['add', 'edit'], true) && empty($selectedSubjectIds)) {
+        $errors[] = 'Select at least one subject this teacher can teach.';
+    }
 
     if ($postAction === 'add') {
-        if (strlen($password) < 8) $errors[] = 'Password must be at least 8 characters.';
+        if (strlen($password) < 8) {
+            $errors[] = 'Password must be at least 8 characters.';
+        }
         if (empty($errors)) {
             $check = db()->prepare('SELECT id FROM users WHERE school_id = ? AND email = ?');
             $check->execute([$sid, $email]);
@@ -31,6 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
                 $stmt = db()->prepare('INSERT INTO users (school_id, email, password_hash, role, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?)');
                 $stmt->execute([$sid, $email, $hash, 'teacher', $firstName, $lastName]);
+                $newId = (int) db()->lastInsertId();
+                SubjectRepository::syncTeacherSubjects($newId, $sid, $selectedSubjectIds);
                 flash('success', 'Teacher added successfully.');
                 redirect('school/teachers.php');
             }
@@ -47,8 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Another user with this email already exists.';
             } elseif (empty($errors)) {
                 if ($password !== '') {
-                    if (strlen($password) < 8) $errors[] = 'Password must be at least 8 characters.';
-                    else {
+                    if (strlen($password) < 8) {
+                        $errors[] = 'Password must be at least 8 characters.';
+                    } else {
                         $hash = password_hash($password, PASSWORD_DEFAULT);
                         $stmt = db()->prepare('UPDATE users SET first_name=?, last_name=?, email=?, password_hash=? WHERE id=? AND school_id=?');
                         $stmt->execute([$firstName, $lastName, $email, $hash, $userId, $sid]);
@@ -58,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$firstName, $lastName, $email, $userId, $sid]);
                 }
                 if (empty($errors)) {
+                    SubjectRepository::syncTeacherSubjects($userId, $sid, $selectedSubjectIds);
                     flash('success', 'Teacher updated.');
                     redirect('school/teachers.php');
                 }
@@ -77,10 +95,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $editUser = null;
+$editSubjectIds = [];
 if ($action === 'edit' && $editId) {
     $stmt = db()->prepare('SELECT * FROM users WHERE id = ? AND school_id = ? AND role = ?');
     $stmt->execute([$editId, $sid, 'teacher']);
     $editUser = $stmt->fetch();
+    if ($editUser) {
+        $editSubjectIds = array_column(SubjectRepository::forTeacher($editId, $sid), 'id');
+    }
 }
 
 $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -88,8 +110,26 @@ $list = UserRepository::paginatedByRole($sid, 'teacher', $page);
 $teachers = $list['items'];
 $pager = paginate($list['total'], $list['page'], $list['per_page']);
 
+$teacherSubjectMap = [];
+if (!empty($teachers)) {
+    $ids = array_column($teachers, 'id');
+    $ph = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare("SELECT ts.teacher_id, s.name FROM teacher_subjects ts
+        INNER JOIN subjects s ON s.id = ts.subject_id
+        WHERE ts.teacher_id IN ($ph) AND s.school_id = ?
+        ORDER BY s.name");
+    $stmt->execute([...$ids, $sid]);
+    foreach ($stmt->fetchAll() as $row) {
+        $teacherSubjectMap[$row['teacher_id']][] = $row['name'];
+    }
+}
+
 $pageTitle = 'Teachers';
 $pageHeading = 'Teachers';
+$pageSubtitle = 'Assign teachable subjects so they can be placed in class groups.';
+$pageActionUrl = ($action === 'add' || $editUser) ? null : 'school/teachers.php?action=add';
+$pageActionLabel = ($action === 'add' || $editUser) ? null : 'Add Teacher';
+$pageActionIcon = 'fa-user-plus';
 $activeMenu = 'teachers';
 $menuItems = schoolAdminMenu();
 $breadcrumbs = [
@@ -101,9 +141,13 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
 <?php if ($action === 'add' || $editUser): ?>
+<div class="admin-form-card">
 <div class="panel">
     <h2><?= $editUser ? 'Edit Teacher' : 'Add Teacher' ?></h2>
     <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
+    <?php if (empty($catalogSubjects)): ?>
+        <div class="alert alert-error">No subjects in catalog yet. <a href="<?= url('school/subjects.php?action=add') ?>">Add subjects first</a>.</div>
+    <?php endif; ?>
     <form method="post">
         <?= csrfField() ?>
         <input type="hidden" name="form_action" value="<?= $editUser ? 'edit' : 'add' ?>">
@@ -117,40 +161,70 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <label>Password <?= $editUser ? '(leave blank to keep current)' : '' ?></label>
             <input type="password" name="password" class="form-control" <?= $editUser ? '' : 'required minlength="8"' ?>>
         </div>
+        <div class="form-group">
+            <label>Teachable subjects</label>
+            <?php if (empty($catalogSubjects)): ?>
+                <p class="text-muted">Create subjects in the catalog before assigning teachers.</p>
+            <?php else: ?>
+                <div class="subject-checkbox-grid">
+                    <?php
+                    $checkedIds = !empty($_POST) ? $selectedSubjectIds : $editSubjectIds;
+                    foreach ($catalogSubjects as $subject):
+                    ?>
+                        <label class="subject-checkbox">
+                            <input type="checkbox" name="subject_ids[]" value="<?= (int) $subject['id'] ?>"
+                                <?= in_array((int) $subject['id'], $checkedIds, true) ? 'checked' : '' ?>>
+                            <span><?= e($subject['name']) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
         <div class="actions">
-            <button type="submit" class="btn btn-primary"><?= $editUser ? 'Update' : 'Add' ?> Teacher</button>
+            <button type="submit" class="btn btn-primary" <?= empty($catalogSubjects) ? 'disabled' : '' ?>><?= $editUser ? 'Update' : 'Add' ?> Teacher</button>
             <a href="<?= url('school/teachers.php') ?>" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
-<?php else: ?>
-<div class="panel-header" style="margin-bottom:1rem;">
-    <h2>All Teachers</h2>
-    <a href="<?= url('school/teachers.php?action=add') ?>" class="btn btn-primary btn-sm">Add Teacher</a>
 </div>
 <?php endif; ?>
 
+<?php if (empty($teachers) && $action !== 'add' && !$editUser): ?>
+<?= adminEmptyState('fa-chalkboard-user', 'No teachers yet', 'Add teachers and select which subjects each can teach.', 'school/teachers.php?action=add', 'Add teacher') ?>
+<?php elseif ($action !== 'add' && !$editUser): ?>
+<div class="admin-table-card">
 <div class="table-wrap">
     <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Subjects</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
-        <?php if (empty($teachers)): ?>
-            <tr><td colspan="4" class="text-muted">No teachers yet.</td></tr>
-        <?php else: foreach ($teachers as $t): ?>
+        <?php foreach ($teachers as $t): ?>
             <tr>
-                <td><?= e($t['first_name'] . ' ' . $t['last_name']) ?></td>
+                <td><?= tableUserCell($t['first_name'], $t['last_name']) ?></td>
                 <td><?= e($t['email']) ?></td>
+                <td>
+                    <?php if (!empty($teacherSubjectMap[$t['id']])): ?>
+                        <div class="subject-tags">
+                            <?php foreach ($teacherSubjectMap[$t['id']] as $tag): ?>
+                                <span class="subject-tag"><?= e($tag) ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <span class="text-muted">None assigned</span>
+                    <?php endif; ?>
+                </td>
                 <td><span class="badge badge-<?= $t['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($t['status'])) ?></span></td>
                 <td class="actions">
                     <a href="<?= url('school/teachers.php?action=edit&id=' . $t['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
                     <form method="post" style="display:inline"><?= csrfField() ?><input type="hidden" name="form_action" value="toggle"><input type="hidden" name="user_id" value="<?= $t['id'] ?>"><button class="btn btn-sm btn-secondary"><?= $t['status'] === 'active' ? 'Deactivate' : 'Activate' ?></button></form>
-                    <form method="post" style="display:inline" onsubmit="return confirm('Delete this teacher?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete"><input type="hidden" name="user_id" value="<?= $t['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
+                    <form method="post" style="display:inline" data-confirm="Delete this teacher?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete"><input type="hidden" name="user_id" value="<?= $t['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
                 </td>
             </tr>
-        <?php endforeach; endif; ?>
+        <?php endforeach; ?>
         </tbody>
     </table>
 </div>
+</div>
 <?= renderPagination($pager, 'school/teachers.php') ?>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/layout/dashboard_footer.php'; ?>

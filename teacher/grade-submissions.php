@@ -6,14 +6,92 @@ requireSchoolActive();
 $user = currentUser();
 $assignmentId = (int) ($_GET['assignment_id'] ?? 0);
 
-$stmt = db()->prepare('SELECT a.*, c.name AS class_name FROM assignments a
-    INNER JOIN classes c ON c.id = a.class_id WHERE a.id = ? AND a.teacher_id = ?');
+$assignmentJoin = 'FROM assignments a
+    INNER JOIN classes c ON c.id = a.class_id
+    INNER JOIN subjects s ON s.id = c.subject_id
+    INNER JOIN class_groups g ON g.id = c.class_group_id';
+
+if ($assignmentId <= 0) {
+    $stmt = db()->prepare("SELECT a.*, s.name AS name, g.name AS group_name,
+        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) AS submission_count,
+        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id AND status = 'submitted' AND grade IS NULL) AS pending_count
+        $assignmentJoin
+        WHERE a.teacher_id = ?
+        ORDER BY a.due_date DESC, a.created_at DESC");
+    $stmt->execute([$user['id']]);
+    $assignments = $stmt->fetchAll();
+
+    $pageTitle = 'Grade Submissions';
+    $pageHeading = 'Grade submissions';
+    $pageSubtitle = 'Select an assignment to review and grade student work.';
+    $activeMenu = 'grading';
+    $menuItems = teacherMenu();
+    $breadcrumbs = [
+        ['label' => 'Dashboard', 'url' => 'teacher/dashboard.php'],
+        ['label' => 'Grade Submissions', 'url' => 'teacher/grade-submissions.php'],
+    ];
+
+    require __DIR__ . '/../includes/layout/dashboard_header.php';
+    ?>
+
+    <?php if (empty($assignments)): ?>
+    <div class="empty-state">
+        <i class="fa-solid fa-inbox"></i>
+        <h3>No assignments yet</h3>
+        <p>Create an assignment in one of your classes to start collecting submissions.</p>
+        <a href="<?= url('teacher/classes.php') ?>" class="btn btn-primary btn-sm">View classes</a>
+    </div>
+    <?php else: ?>
+    <div class="admin-table-card">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Assignment</th>
+                        <th>Class</th>
+                        <th>Due</th>
+                        <th>Submissions</th>
+                        <th>Pending</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($assignments as $a): ?>
+                    <tr>
+                        <td><strong><?= e($a['title']) ?></strong></td>
+                        <td><?= e(classDisplayName($a)) ?></td>
+                        <td><?= formatDate($a['due_date'], 'M j, Y') ?></td>
+                        <td><?= (int) $a['submission_count'] ?></td>
+                        <td>
+                            <?php if ((int) $a['pending_count'] > 0): ?>
+                                <span class="badge badge-warning"><?= (int) $a['pending_count'] ?></span>
+                            <?php else: ?>
+                                <span class="text-muted">0</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="actions">
+                            <a href="<?= url('teacher/grade-submissions.php?assignment_id=' . $a['id']) ?>" class="btn btn-sm btn-primary">Grade</a>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php require __DIR__ . '/../includes/layout/dashboard_footer.php';
+    exit;
+}
+
+$stmt = db()->prepare("SELECT a.*, s.name AS name, g.name AS group_name $assignmentJoin
+    WHERE a.id = ? AND a.teacher_id = ?");
 $stmt->execute([$assignmentId, $user['id']]);
 $assignment = $stmt->fetch();
 
 if (!$assignment) {
     flash('error', 'Assignment not found.');
-    redirect('teacher/assignments.php');
+    redirect('teacher/grade-submissions.php');
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -47,16 +125,21 @@ $pageTitle = 'Grade Submissions';
 $pageHeading = 'Grade: ' . $assignment['title'];
 $activeMenu = 'grading';
 $menuItems = teacherMenu();
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'url' => 'teacher/dashboard.php'],
+    ['label' => 'Grade Submissions', 'url' => 'teacher/grade-submissions.php'],
+    ['label' => $assignment['title'], 'url' => 'teacher/grade-submissions.php?assignment_id=' . $assignmentId],
+];
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
 <div class="actions mb-1">
-    <a href="<?= url('teacher/assignments.php') ?>" class="btn btn-secondary btn-sm">Back to Assignments</a>
+    <a href="<?= url('teacher/grade-submissions.php') ?>" class="btn btn-secondary btn-sm">Back to assignments</a>
 </div>
 
 <div class="panel">
-    <p><strong>Class:</strong> <?= e($assignment['class_name']) ?> · <strong>Max Points:</strong> <?= e($assignment['max_points']) ?> · <strong>Due:</strong> <?= formatDate($assignment['due_date']) ?></p>
+    <p><strong>Class:</strong> <?= e(classDisplayName($assignment)) ?> · <strong>Max Points:</strong> <?= e($assignment['max_points']) ?> · <strong>Due:</strong> <?= formatDate($assignment['due_date']) ?></p>
 </div>
 
 <?php if (empty($submissions)): ?>

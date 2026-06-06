@@ -3,7 +3,7 @@
 <footer class="public-footer">
     <div class="container footer-inner">
         <div class="footer-brand">
-            <a href="<?= url('index.php') ?>" class="logo"><i class="fa-solid fa-graduation-cap"></i> <?= e(APP_NAME) ?></a>
+            <a href="<?= url('index.php') ?>" class="logo"><?= siteLogoImg('site-logo site-logo--footer') ?></a>
             <p>Learning management for modern educational institutions.</p>
         </div>
         <div class="footer-links">

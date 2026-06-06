@@ -87,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $formAction = 'login.php';
+$backUrl = $schoolPreselected ? url('index.php#schools') : url('index.php');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -94,76 +95,89 @@ $formAction = 'login.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle) ?></title>
+    <?php require __DIR__ . '/includes/layout/favicon.php'; ?>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="<?= url('assets/css/app.css') ?>">
 </head>
 <body>
+<?php require __DIR__ . '/includes/layout/page_loader.php'; ?>
 <div class="auth-page">
-    <div class="auth-card">
-        <?php if ($schoolPreselected): ?>
-            <div class="school-login-banner">
-                <i class="fa-solid fa-school"></i>
-                <div>
-                    <small>Signing in to</small>
-                    <strong><?= e($school['name']) ?></strong>
-                </div>
-            </div>
-            <h1>School Login</h1>
-            <p class="subtitle">Sign in as School Admin, Teacher, or Student</p>
-        <?php else: ?>
-            <h1>School Login</h1>
-            <p class="subtitle">Enter your school code, email, and password</p>
-        <?php endif; ?>
-
-        <?php foreach ($errors as $err): ?>
-            <div class="alert alert-error"><?= e($err) ?></div>
-        <?php endforeach; ?>
-        <?php foreach (getFlashes() as $type => $messages): ?>
-            <?php foreach ($messages as $msg): ?>
-                <div class="alert alert-<?= e($type) ?>"><?= e($msg) ?></div>
-            <?php endforeach; ?>
-        <?php endforeach; ?>
-
-        <form method="post" action="<?= url($formAction) ?>">
-            <?= csrfField() ?>
-
+    <div class="auth-card-split">
+        <div class="auth-split-panel">
+            <?= siteLogoImg('site-logo site-logo--auth-panel') ?>
             <?php if ($schoolPreselected): ?>
-                <input type="hidden" name="school_id" value="<?= (int) $school['id'] ?>">
+                <h2><?= e($school['name']) ?></h2>
+                <p>Sign in to access your school portal. Enter your credentials to continue.</p>
             <?php else: ?>
-                <div class="form-group">
-                    <label for="school_code">School Code</label>
-                    <input type="text" id="school_code" name="school_code" class="form-control school-code-input"
-                        value="<?= old('school_code') ?>"
-                        placeholder="e.g. TEST-SCHOOL" required autofocus
-                        autocomplete="off" spellcheck="false"
-                        style="text-transform:uppercase; letter-spacing:0.08em; font-weight:600;">
-                    <small class="text-muted">Ask your school admin for the code, or pick a school on the <a href="<?= url('index.php#schools') ?>">homepage</a>.</small>
-                </div>
+                <h2><?= e(APP_NAME) ?></h2>
+                <p>Your way to knowledge. Sign in with your school code and credentials to access the learning portal.</p>
             <?php endif; ?>
+        </div>
 
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" name="email" class="form-control" value="<?= old('email') ?>" required <?= $schoolPreselected ? 'autofocus' : '' ?>>
+        <div class="auth-split-form">
+            <div class="auth-top">
+                <a href="<?= e($backUrl) ?>" class="auth-footer-link muted"><i class="fa-solid fa-arrow-left"></i> Back<?= $schoolPreselected ? ' to schools' : ' to home' ?></a>
             </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" class="form-control" required>
+
+            <div class="auth-brand" style="margin-bottom:1.25rem;">
+                <span class="auth-brand-name" style="font-size:1.25rem;">
+                    <?= $schoolPreselected ? 'Sign in to ' . e($school['name']) : 'Sign in to your school' ?>
+                </span>
             </div>
-            <button type="submit" class="btn btn-primary btn-block">Sign In</button>
-        </form>
 
-        <?php if ($schoolPreselected): ?>
-            <p class="mt-1 text-muted" style="text-align:center;font-size:.875rem;">
-                <a href="<?= url('login.php') ?>">Use a different school code</a>
-            </p>
-        <?php endif; ?>
+            <?php foreach ($errors as $err): ?>
+                <div class="alert alert-error alert-icon"><i class="fa-solid fa-circle-exclamation"></i><span><?= e($err) ?></span></div>
+            <?php endforeach; ?>
+            <?php foreach (getFlashes() as $type => $messages): ?>
+                <?php foreach ($messages as $msg): ?>
+                    <div class="alert alert-<?= e($type) ?> alert-icon" data-auto-dismiss>
+                        <i class="fa-solid <?= $type === 'success' ? 'fa-circle-check' : ($type === 'error' ? 'fa-circle-xmark' : 'fa-circle-info') ?>"></i>
+                        <span><?= e($msg) ?></span>
+                    </div>
+                <?php endforeach; ?>
+            <?php endforeach; ?>
 
-        <p class="mt-1 text-muted" style="text-align:center;font-size:.875rem;">
-            Don't have a school account? <a href="<?= url('register/school.php') ?>">Register your school</a>
-        </p>
-        <p class="text-muted" style="text-align:center;font-size:.875rem;">
-            <a href="<?= url('index.php') ?>">Back to home</a>
-        </p>
+            <form method="post" action="<?= url($formAction) ?>">
+                <?= csrfField() ?>
+
+                <?php if ($schoolPreselected): ?>
+                    <input type="hidden" name="school_id" value="<?= (int) $school['id'] ?>">
+                <?php else: ?>
+                    <div class="form-group">
+                        <label for="school_code">School Code</label>
+                        <div class="input-wrap">
+                            <span class="input-wrap-icon"><i class="fa-solid fa-school"></i></span>
+                            <input type="text" id="school_code" name="school_code" class="form-control school-code-input"
+                                value="<?= old('school_code') ?>"
+                                placeholder="e.g. TEST-SCHOOL" required autofocus
+                                autocomplete="off" spellcheck="false">
+                        </div>
+                        <span class="input-hint">Ask your school admin for the code, or pick a school on the <a href="<?= url('index.php#schools') ?>">homepage</a>.</span>
+                    </div>
+                <?php endif; ?>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <div class="input-wrap">
+                        <span class="input-wrap-icon"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="email" id="email" name="email" class="form-control" value="<?= old('email') ?>" required placeholder="you@school.edu" <?= $schoolPreselected ? 'autofocus' : '' ?>>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrap">
+                        <span class="input-wrap-icon"><i class="fa-solid fa-lock"></i></span>
+                        <input type="password" id="password" name="password" class="form-control" required placeholder="••••••••">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block auth-submit">
+                    <i class="fa-solid fa-right-to-bracket"></i> Sign In
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 <script src="<?= url('assets/js/app.js') ?>"></script>

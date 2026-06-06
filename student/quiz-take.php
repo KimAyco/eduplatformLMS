@@ -7,7 +7,8 @@ $user = currentUser();
 $quizId = (int) ($_GET['quiz_id'] ?? 0);
 
 $stmt = db()->prepare('SELECT q.* FROM quizzes q
-    INNER JOIN class_students cs ON cs.class_id = q.class_id AND cs.student_id = ?
+    INNER JOIN classes c ON c.id = q.class_id
+    INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
     WHERE q.id = ?');
 $stmt->execute([$user['id'], $quizId]);
 $quiz = $stmt->fetch();

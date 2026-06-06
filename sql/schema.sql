@@ -14,9 +14,12 @@ DROP TABLE IF EXISTS quizzes;
 DROP TABLE IF EXISTS assignment_submissions;
 DROP TABLE IF EXISTS assignments;
 DROP TABLE IF EXISTS materials;
-DROP TABLE IF EXISTS class_students;
+DROP TABLE IF EXISTS class_group_students;
 DROP TABLE IF EXISTS class_teachers;
+DROP TABLE IF EXISTS teacher_subjects;
 DROP TABLE IF EXISTS classes;
+DROP TABLE IF EXISTS subjects;
+DROP TABLE IF EXISTS class_groups;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS schools;
 
@@ -30,6 +33,8 @@ CREATE TABLE schools (
     email VARCHAR(255) NOT NULL,
     phone VARCHAR(50) DEFAULT NULL,
     address TEXT DEFAULT NULL,
+    cover_image VARCHAR(512) DEFAULT NULL,
+    logo_image VARCHAR(512) DEFAULT NULL,
     status ENUM('pending', 'active', 'rejected', 'suspended') NOT NULL DEFAULT 'pending',
     registered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_at DATETIME DEFAULT NULL,
@@ -58,17 +63,54 @@ CREATE TABLE users (
 ALTER TABLE schools ADD CONSTRAINT fk_schools_approved_by
     FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL;
 
-CREATE TABLE classes (
+CREATE TABLE class_groups (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     school_id INT UNSIGNED NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    section VARCHAR(50) DEFAULT NULL,
+    name VARCHAR(100) NOT NULL,
     description TEXT DEFAULT NULL,
     academic_year VARCHAR(20) DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_class_groups_school (school_id),
+    CONSTRAINT fk_class_groups_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE subjects (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_subjects_school_name (school_id, name),
+    KEY idx_subjects_school (school_id),
+    CONSTRAINT fk_subjects_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE classes (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    class_group_id INT UNSIGNED NOT NULL,
+    subject_id INT UNSIGNED NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_classes_group_subject (class_group_id, subject_id),
     KEY idx_classes_school (school_id),
-    CONSTRAINT fk_classes_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+    KEY idx_classes_group (class_group_id),
+    KEY idx_classes_subject (subject_id),
+    CONSTRAINT fk_classes_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
+    CONSTRAINT fk_classes_group FOREIGN KEY (class_group_id) REFERENCES class_groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_classes_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE teacher_subjects (
+    teacher_id INT UNSIGNED NOT NULL,
+    subject_id INT UNSIGNED NOT NULL,
+    assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (teacher_id, subject_id),
+    KEY idx_ts_subject (subject_id),
+    CONSTRAINT fk_ts_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ts_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE class_teachers (
@@ -81,14 +123,14 @@ CREATE TABLE class_teachers (
     CONSTRAINT fk_ct_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE class_students (
-    class_id INT UNSIGNED NOT NULL,
+CREATE TABLE class_group_students (
+    class_group_id INT UNSIGNED NOT NULL,
     student_id INT UNSIGNED NOT NULL,
     enrolled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (class_id, student_id),
-    KEY idx_cs_student (student_id),
-    CONSTRAINT fk_cs_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
-    CONSTRAINT fk_cs_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+    PRIMARY KEY (class_group_id, student_id),
+    KEY idx_cgs_student (student_id),
+    CONSTRAINT fk_cgs_group FOREIGN KEY (class_group_id) REFERENCES class_groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cgs_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE materials (

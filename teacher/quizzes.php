@@ -53,10 +53,13 @@ if ($action === 'edit' && $editId) {
     }
 }
 
-$stmt = db()->prepare('SELECT q.*, c.name AS class_name,
+$stmt = db()->prepare('SELECT q.*, c.name AS class_name, g.name AS group_name,
     (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = q.id) AS question_count,
     (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id AND status != ?) AS attempt_count
-    FROM quizzes q INNER JOIN classes c ON c.id = q.class_id WHERE q.teacher_id = ? ORDER BY q.created_at DESC');
+    FROM quizzes q
+    INNER JOIN classes c ON c.id = q.class_id
+    INNER JOIN class_groups g ON g.id = c.class_group_id
+    WHERE q.teacher_id = ? ORDER BY q.created_at DESC');
 $stmt->execute(['in_progress', $user['id']]);
 $quizzes = $stmt->fetchAll();
 
@@ -87,7 +90,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <label>Class</label>
             <select name="class_id" class="form-control" required>
                 <?php foreach ($classes as $c): ?>
-                    <option value="<?= $c['id'] ?>" <?= ($editItem['class_id'] ?? '') == $c['id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+                    <option value="<?= $c['id'] ?>" <?= ($editItem['class_id'] ?? '') == $c['id'] ? 'selected' : '' ?>><?= e(classDisplayName($c)) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -117,7 +120,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <?php else: foreach ($quizzes as $q): ?>
             <tr>
                 <td><?= e($q['title']) ?></td>
-                <td><?= e($q['class_name']) ?></td>
+                <td><?= e(classDisplayName($q)) ?></td>
                 <td><?= (int)$q['question_count'] ?></td>
                 <td><?= (int)$q['attempt_count'] ?></td>
                 <td><?= formatDate($q['due_date']) ?></td>

@@ -202,11 +202,11 @@ foreach ($quizzes as $q) {
 }
 usort($activities, fn ($x, $y) => $y['sort'] <=> $x['sort']);
 
-$classTitle = $class['name'] . ($class['section'] ? ' — Section ' . $class['section'] : '');
+$classTitle = classDisplayName($class);
 $pageTitle = $classTitle;
 $pageHeading = $classTitle;
 $hidePageHeader = true;
-$activeMenu = 'dashboard';
+$activeMenu = 'classes';
 $menuItems = teacherMenu();
 $breadcrumbs = [
     ['label' => 'Dashboard', 'url' => 'teacher/dashboard.php'],
@@ -229,6 +229,17 @@ if (str_contains($action, 'material')) {
 } elseif (str_contains($action, 'quiz')) {
     $formType = 'quiz';
 }
+
+$groupedByType = ['material' => [], 'assignment' => [], 'quiz' => []];
+foreach ($activities as $act) {
+    $groupedByType[$act['type']][] = $act;
+}
+$defaultOpenSection = !empty($activities) ? $activities[0]['type'] : 'material';
+$sectionMeta = [
+    'material' => ['label' => 'Materials', 'icon' => 'fa-file-lines'],
+    'assignment' => ['label' => 'Assignments', 'icon' => 'fa-pen-to-square'],
+    'quiz' => ['label' => 'Quizzes', 'icon' => 'fa-circle-question'],
+];
 ?>
 
 <div class="course-view">
@@ -240,8 +251,8 @@ if (str_contains($action, 'material')) {
                 <div>
                     <h1 class="course-hero-title"><?= e($class['name']) ?></h1>
                     <div class="course-hero-tags">
-                        <?php if ($class['section']): ?><span class="course-tag"><i class="fa-solid fa-layer-group"></i> Section <?= e($class['section']) ?></span><?php endif; ?>
-                        <?php if ($class['academic_year']): ?><span class="course-tag"><i class="fa-solid fa-calendar"></i> <?= e($class['academic_year']) ?></span><?php endif; ?>
+                        <?php if ($class['group_name']): ?><span class="course-tag"><i class="fa-solid fa-layer-group"></i> <?= e($class['group_name']) ?></span><?php endif; ?>
+                        <?php if ($class['group_academic_year']): ?><span class="course-tag"><i class="fa-solid fa-calendar"></i> <?= e($class['group_academic_year']) ?></span><?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -366,7 +377,10 @@ if (str_contains($action, 'material')) {
             <section class="course-content-section">
                 <div class="course-content-header">
                     <h2><i class="fa-solid fa-book-open"></i> Course content</h2>
-                    <?php if ($activityCount > 0): ?><span class="course-content-count"><?= $activityCount ?> item<?= $activityCount !== 1 ? 's' : '' ?></span><?php endif; ?>
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <?php if ($activityCount > 0): ?><span class="course-content-count"><?= $activityCount ?> item<?= $activityCount !== 1 ? 's' : '' ?></span><?php endif; ?>
+                        <button type="button" class="btn btn-primary btn-sm" id="openActivityModal"><i class="fa-solid fa-plus"></i> Add activity</button>
+                    </div>
                 </div>
 
                 <?php if (empty($activities)): ?>
@@ -380,8 +394,19 @@ if (str_contains($action, 'material')) {
                     </div>
                 </div>
                 <?php else: ?>
+                <?php foreach ($sectionMeta as $sectionKey => $meta):
+                    if (empty($groupedByType[$sectionKey])) continue;
+                    $isOpen = $sectionKey === $defaultOpenSection;
+                ?>
+                <div class="course-section<?= $isOpen ? ' is-open' : '' ?>" data-section="<?= e($sectionKey) ?>">
+                    <button type="button" class="course-section-header" data-accordion-btn>
+                        <span><i class="fa-solid <?= e($meta['icon']) ?> section-icon"></i><?= e($meta['label']) ?></span>
+                        <span class="section-count"><?= count($groupedByType[$sectionKey]) ?></span>
+                        <i class="fa-solid fa-chevron-down section-chevron"></i>
+                    </button>
+                    <div class="course-section-body">
                 <div class="activity-list">
-                    <?php foreach ($activities as $act):
+                    <?php foreach ($groupedByType[$sectionKey] as $act):
                         $item = $act['item'];
                         if ($act['type'] === 'material'): ?>
                     <article class="activity-card activity-card--material">
@@ -398,7 +423,7 @@ if (str_contains($action, 'material')) {
                         </div>
                         <div class="activity-card-actions">
                             <a href="<?= teacherCourseUrl($classId, 'action=edit_material&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                            <form method="post" onsubmit="return confirm('Delete this material?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
+                            <form method="post" data-confirm="Delete this material?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                         </div>
                     </article>
                         <?php elseif ($act['type'] === 'assignment'): ?>
@@ -416,7 +441,7 @@ if (str_contains($action, 'material')) {
                         <div class="activity-card-actions">
                             <a href="<?= url('teacher/grade-submissions.php?assignment_id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Grade</a>
                             <a href="<?= teacherCourseUrl($classId, 'action=edit_assignment&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                            <form method="post" onsubmit="return confirm('Delete this assignment?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_assignment"><input type="hidden" name="assignment_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
+                            <form method="post" data-confirm="Delete this assignment?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_assignment"><input type="hidden" name="assignment_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                         </div>
                     </article>
                         <?php else: ?>
@@ -435,14 +460,39 @@ if (str_contains($action, 'material')) {
                             <a href="<?= url('teacher/quiz-edit.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-primary">Questions</a>
                             <a href="<?= url('teacher/quiz-attempts.php?quiz_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Attempts</a>
                             <a href="<?= teacherCourseUrl($classId, 'action=edit_quiz&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                            <form method="post" onsubmit="return confirm('Delete this quiz?')"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_quiz"><input type="hidden" name="quiz_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
+                            <form method="post" data-confirm="Delete this quiz?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_quiz"><input type="hidden" name="quiz_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                         </div>
                     </article>
                         <?php endif; ?>
                     <?php endforeach; ?>
                 </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
                 <?php endif; ?>
             </section>
+        </div>
+    </div>
+</div>
+
+<div class="activity-modal-overlay" id="activityModal" hidden>
+    <div class="activity-modal">
+        <button type="button" class="activity-modal-close" id="closeActivityModal" aria-label="Close">&times;</button>
+        <h3>Add to course</h3>
+        <p>Choose what students will see in this class.</p>
+        <div class="activity-modal-options">
+            <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="activity-modal-option">
+                <span class="activity-picker-icon material"><i class="fa-solid fa-file-lines"></i></span>
+                <span><strong>Material</strong><br><small>Files, links &amp; notes</small></span>
+            </a>
+            <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="activity-modal-option">
+                <span class="activity-picker-icon assignment"><i class="fa-solid fa-pen-to-square"></i></span>
+                <span><strong>Assignment</strong><br><small>Due dates &amp; submissions</small></span>
+            </a>
+            <a href="<?= teacherCourseUrl($classId, 'action=add_quiz') ?>" class="activity-modal-option">
+                <span class="activity-picker-icon quiz"><i class="fa-solid fa-circle-question"></i></span>
+                <span><strong>Quiz</strong><br><small>Questions &amp; grading</small></span>
+            </a>
         </div>
     </div>
 </div>

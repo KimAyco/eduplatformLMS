@@ -47,7 +47,7 @@ foreach ($quizzes as $q) {
 }
 usort($activities, fn ($x, $y) => $y['sort'] <=> $x['sort']);
 
-$classTitle = $class['name'] . ($class['section'] ? ' — Section ' . $class['section'] : '');
+$classTitle = classDisplayName($class);
 $pageTitle = $classTitle;
 $pageHeading = $classTitle;
 $hidePageHeader = true;
@@ -62,6 +62,17 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 
 $activityCount = count($activities);
 $courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
+
+$groupedByType = ['material' => [], 'assignment' => [], 'quiz' => []];
+foreach ($activities as $act) {
+    $groupedByType[$act['type']][] = $act;
+}
+$defaultOpenSection = !empty($activities) ? $activities[0]['type'] : 'material';
+$sectionMeta = [
+    'material' => ['label' => 'Materials', 'icon' => 'fa-file-lines'],
+    'assignment' => ['label' => 'Assignments', 'icon' => 'fa-pen-to-square'],
+    'quiz' => ['label' => 'Quizzes', 'icon' => 'fa-circle-question'],
+];
 ?>
 
 <div class="course-view course-view--student">
@@ -73,8 +84,8 @@ $courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
                 <div>
                     <h1 class="course-hero-title"><?= e($class['name']) ?></h1>
                     <div class="course-hero-tags">
-                        <?php if ($class['section']): ?><span class="course-tag"><i class="fa-solid fa-layer-group"></i> Section <?= e($class['section']) ?></span><?php endif; ?>
-                        <?php if ($class['academic_year']): ?><span class="course-tag"><i class="fa-solid fa-calendar"></i> <?= e($class['academic_year']) ?></span><?php endif; ?>
+                        <?php if ($class['group_name']): ?><span class="course-tag"><i class="fa-solid fa-layer-group"></i> <?= e($class['group_name']) ?></span><?php endif; ?>
+                        <?php if ($class['group_academic_year']): ?><span class="course-tag"><i class="fa-solid fa-calendar"></i> <?= e($class['group_academic_year']) ?></span><?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -98,8 +109,19 @@ $courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
             <p>Your teacher has not published any materials or activities for this class.</p>
         </div>
         <?php else: ?>
+        <?php foreach ($sectionMeta as $sectionKey => $meta):
+            if (empty($groupedByType[$sectionKey])) continue;
+            $isOpen = $sectionKey === $defaultOpenSection;
+        ?>
+        <div class="course-section<?= $isOpen ? ' is-open' : '' ?>" data-section="<?= e($sectionKey) ?>">
+            <button type="button" class="course-section-header" data-accordion-btn>
+                <span><i class="fa-solid <?= e($meta['icon']) ?> section-icon"></i><?= e($meta['label']) ?></span>
+                <span class="section-count"><?= count($groupedByType[$sectionKey]) ?></span>
+                <i class="fa-solid fa-chevron-down section-chevron"></i>
+            </button>
+            <div class="course-section-body">
         <div class="activity-list">
-            <?php foreach ($activities as $act):
+            <?php foreach ($groupedByType[$sectionKey] as $act):
                 $item = $act['item'];
                 if ($act['type'] === 'material'): ?>
             <article class="activity-card activity-card--material">
@@ -156,6 +178,9 @@ $courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
                 <?php endif; ?>
             <?php endforeach; ?>
         </div>
+            </div>
+        </div>
+        <?php endforeach; ?>
         <?php endif; ?>
     </section>
 </div>

@@ -1,5 +1,37 @@
 <?php
 
+function siteLogoPath(): string
+{
+    return 'assets/img/Gemini_Generated_Image_lt629klt629klt62-removebg-preview.png';
+}
+
+function siteLogoUrl(): string
+{
+    return url(siteLogoPath());
+}
+
+function siteLogoImg(string $class = 'site-logo', ?string $alt = null): string
+{
+    return '<img src="' . e(siteLogoUrl()) . '" alt="' . e($alt ?? APP_NAME) . '" class="' . e($class) . '">';
+}
+
+function siteFaviconPath(): string
+{
+    return 'assets/img/tab icon.png';
+}
+
+function siteFaviconUrl(): string
+{
+    return url(str_replace(' ', '%20', siteFaviconPath()));
+}
+
+function renderSiteFavicon(): void
+{
+    $faviconUrl = siteFaviconUrl();
+    echo '<link rel="icon" type="image/png" href="' . e($faviconUrl) . '">' . "\n";
+    echo '    <link rel="apple-touch-icon" href="' . e($faviconUrl) . '">';
+}
+
 function url(string $path = ''): string
 {
     $path = ltrim($path, '/');
@@ -28,6 +60,141 @@ function teacherCourseUrl(int $classId, string $query = ''): string
 function studentCourseUrl(int $classId): string
 {
     return url('student/course.php?id=' . $classId);
+}
+
+function schoolEnrollUrl(?string $schoolCode): string
+{
+    $code = normalizeSchoolCode($schoolCode ?? '');
+    if ($code === '') {
+        return url('index.php#schools');
+    }
+
+    return url('schools/' . rawurlencode($code) . '/enroll');
+}
+
+/** @return list<string> */
+function schoolDefaultCoverUrls(): array
+{
+    return [
+        url('assets/img/school-covers/default-1.jpg'),
+        url('assets/img/school-covers/default-2.jpg'),
+        url('assets/img/school-covers/default-3.jpg'),
+        url('assets/img/school-covers/default-4.jpg'),
+    ];
+}
+
+function schoolCoverImageUrl(array $school): string
+{
+    $custom = trim((string) ($school['cover_image'] ?? ''));
+    if ($custom !== '') {
+        return url('school-cover.php?file=' . rawurlencode(ltrim($custom, '/')));
+    }
+
+    $defaults = schoolDefaultCoverUrls();
+    $index = abs((int) ($school['id'] ?? 0)) % count($defaults);
+
+    return $defaults[$index];
+}
+
+function uploadSchoolCover(array $file, int $schoolId): ?string
+{
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Cover image upload failed.');
+    }
+
+    if ($file['size'] > 5 * 1024 * 1024) {
+        throw new RuntimeException('Cover image must be 5 MB or smaller.');
+    }
+
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+        throw new RuntimeException('Cover image must be JPG, PNG, WebP, or GIF.');
+    }
+
+    $dir = UPLOAD_DIR . '/' . $schoolId . '/covers';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $filename = 'cover-' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $dest = $dir . '/' . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not save cover image.');
+    }
+
+    return $schoolId . '/covers/' . $filename;
+}
+
+function schoolLogoImageUrl(array $school): ?string
+{
+    $custom = trim((string) ($school['logo_image'] ?? ''));
+    if ($custom !== '') {
+        return url('school-logo.php?file=' . rawurlencode(ltrim($custom, '/')));
+    }
+
+    return null;
+}
+
+function schoolAvatarInitial(array $school): string
+{
+    return strtoupper(mb_substr($school['name'] ?? 'S', 0, 1));
+}
+
+function schoolAvatarHtml(array $school, string $class): string
+{
+    $logoUrl = schoolLogoImageUrl($school);
+    if ($logoUrl !== null) {
+        return '<div class="' . $class . ' school-avatar--image" aria-hidden="true">'
+            . '<img src="' . e($logoUrl) . '" alt="" class="school-avatar-img"></div>';
+    }
+
+    return '<div class="' . $class . '" aria-hidden="true">' . e(schoolAvatarInitial($school)) . '</div>';
+}
+
+function uploadSchoolLogo(array $file, int $schoolId): ?string
+{
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Logo image upload failed.');
+    }
+
+    if ($file['size'] > 2 * 1024 * 1024) {
+        throw new RuntimeException('Logo image must be 2 MB or smaller.');
+    }
+
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+        throw new RuntimeException('Logo image must be JPG, PNG, WebP, or GIF.');
+    }
+
+    $dir = UPLOAD_DIR . '/' . $schoolId . '/logos';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $filename = 'logo-' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $dest = $dir . '/' . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not save logo image.');
+    }
+
+    return $schoolId . '/logos/' . $filename;
+}
+
+function classDisplayName(array $class): string
+{
+    $name = $class['name'] ?? '';
+    $group = $class['group_name'] ?? null;
+    return $group ? $name . ' (' . $group . ')' : $name;
 }
 
 function redirect(string $path): never
@@ -236,5 +403,43 @@ function renderPagination(array $pager, string $baseUrl): string
         echo '<a href="' . e($baseUrl . $sep . 'page=' . ($pager['page'] + 1)) . '" class="btn btn-sm btn-secondary">Next</a>';
     }
     echo '</nav>';
+    return ob_get_clean();
+}
+
+function tableUserCell(string $firstName, string $lastName): string
+{
+    $name = trim($firstName . ' ' . $lastName);
+    $initials = strtoupper(mb_substr($firstName, 0, 1) . mb_substr($lastName, 0, 1));
+    return '<div class="table-user-cell"><span class="table-avatar" aria-hidden="true">' . e($initials) . '</span><span class="table-user-name">' . e($name) . '</span></div>';
+}
+
+function tableSubjectCell(string $name): string
+{
+    return '<div class="table-subject-cell"><span class="table-icon-badge"><i class="fa-solid fa-book"></i></span><span>' . e($name) . '</span></div>';
+}
+
+function tableGroupCell(string $name, ?string $year = null): string
+{
+    $html = '<div class="table-group-cell"><span class="table-icon-badge table-icon-badge-group"><i class="fa-solid fa-layer-group"></i></span><span><strong>' . e($name) . '</strong>';
+    if ($year) {
+        $html .= '<small class="text-muted">' . e($year) . '</small>';
+    }
+    $html .= '</span></div>';
+    return $html;
+}
+
+function adminEmptyState(string $icon, string $title, string $text, ?string $ctaHref = null, ?string $ctaLabel = null): string
+{
+    ob_start();
+    ?>
+    <div class="admin-empty-state">
+        <div class="admin-empty-icon"><i class="fa-solid <?= e($icon) ?>"></i></div>
+        <h3><?= e($title) ?></h3>
+        <p><?= e($text) ?></p>
+        <?php if ($ctaHref && $ctaLabel): ?>
+            <a href="<?= url($ctaHref) ?>" class="btn btn-primary"><?= e($ctaLabel) ?></a>
+        <?php endif; ?>
+    </div>
+    <?php
     return ob_get_clean();
 }

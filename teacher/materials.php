@@ -80,8 +80,9 @@ if ($action === 'edit' && $editId) {
 $classIds = array_column($classes, 'id');
 $materials = [];
 if (!empty($classIds)) {
-    $sql = 'SELECT m.*, c.name AS class_name, c.section FROM materials m
+    $sql = 'SELECT m.*, c.name AS class_name, g.name AS group_name FROM materials m
             INNER JOIN classes c ON c.id = m.class_id
+            INNER JOIN class_groups g ON g.id = c.class_group_id
             WHERE m.teacher_id = ?';
     $params = [$user['id']];
     if ($filterClass && in_array($filterClass, $classIds)) {
@@ -109,7 +110,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <select name="class_id" class="form-control" onchange="this.form.submit()">
             <option value="">All classes</option>
             <?php foreach ($classes as $c): ?>
-                <option value="<?= $c['id'] ?>" <?= $filterClass === (int)$c['id'] ? 'selected' : '' ?>><?= e($c['name'] . ($c['section'] ? ' - '.$c['section'] : '')) ?></option>
+                <option value="<?= $c['id'] ?>" <?= $filterClass === (int)$c['id'] ? 'selected' : '' ?>><?= e(classDisplayName($c)) ?></option>
             <?php endforeach; ?>
         </select>
     </form>
@@ -131,7 +132,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <label>Class</label>
             <select name="class_id" class="form-control" required>
                 <?php foreach ($classes as $c): ?>
-                    <option value="<?= $c['id'] ?>" <?= ($editMat['class_id'] ?? '') == $c['id'] ? 'selected' : '' ?>><?= e($c['name'] . ($c['section'] ? ' - '.$c['section'] : '')) ?></option>
+                    <option value="<?= $c['id'] ?>" <?= ($editMat['class_id'] ?? '') == $c['id'] ? 'selected' : '' ?>><?= e(classDisplayName($c)) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -163,7 +164,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <?php else: foreach ($materials as $m): ?>
             <tr>
                 <td><?= e($m['title']) ?></td>
-                <td><?= e($m['class_name'] . ($m['section'] ? ' - '.$m['section'] : '')) ?></td>
+                <td><?= e(classDisplayName($m)) ?></td>
                 <td>
                     <?php if ($m['file_path']): ?><a href="<?= e(uploadUrl($m['file_path'])) ?>" target="_blank">File</a><?php endif; ?>
                     <?php if ($m['external_link']): ?><?= $m['file_path'] ? ' · ' : '' ?><a href="<?= e($m['external_link']) ?>" target="_blank">Link</a><?php endif; ?>

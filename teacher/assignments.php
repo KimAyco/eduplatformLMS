@@ -52,9 +52,13 @@ if ($action === 'edit' && $editId) {
     }
 }
 
-$sql = 'SELECT a.*, c.name AS class_name, c.section,
+$sql = 'SELECT a.*, s.name AS name, s.name AS class_name, g.name AS group_name,
         (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) AS submission_count
-        FROM assignments a INNER JOIN classes c ON c.id = a.class_id WHERE a.teacher_id = ?';
+        FROM assignments a
+        INNER JOIN classes c ON c.id = a.class_id
+        INNER JOIN subjects s ON s.id = c.subject_id
+        INNER JOIN class_groups g ON g.id = c.class_group_id
+        WHERE a.teacher_id = ?';
 $params = [$user['id']];
 if ($filterClass) {
     $sql .= ' AND a.class_id = ?';
@@ -80,7 +84,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <select name="class_id" class="form-control" onchange="this.form.submit()">
             <option value="">All classes</option>
             <?php foreach ($classes as $c): ?>
-                <option value="<?= $c['id'] ?>" <?= $filterClass === (int)$c['id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+                <option value="<?= $c['id'] ?>" <?= $filterClass === (int)$c['id'] ? 'selected' : '' ?>><?= e(classDisplayName($c)) ?></option>
             <?php endforeach; ?>
         </select>
     </form>
@@ -102,7 +106,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <label>Class</label>
             <select name="class_id" class="form-control" required>
                 <?php foreach ($classes as $c): ?>
-                    <option value="<?= $c['id'] ?>" <?= ($editItem['class_id'] ?? '') == $c['id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+                    <option value="<?= $c['id'] ?>" <?= ($editItem['class_id'] ?? '') == $c['id'] ? 'selected' : '' ?>><?= e(classDisplayName($c)) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -131,7 +135,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <?php else: foreach ($assignments as $a): ?>
             <tr>
                 <td><?= e($a['title']) ?></td>
-                <td><?= e($a['class_name']) ?></td>
+                <td><?= e(classDisplayName($a)) ?></td>
                 <td><?= formatDate($a['due_date']) ?></td>
                 <td><?= e($a['max_points']) ?></td>
                 <td><?= (int)$a['submission_count'] ?></td>

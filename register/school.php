@@ -94,6 +94,7 @@ $pageTitle = 'Register School — ' . APP_NAME;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle) ?></title>
+    <?php require __DIR__ . '/../includes/layout/favicon.php'; ?>
     <link rel="stylesheet" href="<?= url('assets/css/app.css') ?>">
 </head>
 <body>

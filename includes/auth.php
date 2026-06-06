@@ -186,7 +186,9 @@ function teacherHasClass(int $classId, ?int $teacherId = null): bool
 function studentHasClass(int $classId, ?int $studentId = null): bool
 {
     $studentId = $studentId ?? currentUser()['id'];
-    $stmt = db()->prepare('SELECT 1 FROM class_students WHERE class_id = ? AND student_id = ?');
+    $stmt = db()->prepare('SELECT 1 FROM class_group_students cgs
+        INNER JOIN classes c ON c.class_group_id = cgs.class_group_id
+        WHERE c.id = ? AND cgs.student_id = ?');
     $stmt->execute([$classId, $studentId]);
     return (bool) $stmt->fetch();
 }
@@ -220,9 +222,7 @@ function requireClassAccess(int $classId, string $role): void
 
 function getClass(int $classId): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM classes WHERE id = ? AND school_id = ?');
-    $stmt->execute([$classId, schoolId()]);
-    return $stmt->fetch() ?: null;
+    return ClassRepository::getWithGroup($classId, schoolId());
 }
 
 function getTeacherClasses(?int $teacherId = null): array
