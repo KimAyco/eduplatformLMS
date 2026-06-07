@@ -15,6 +15,23 @@ function siteLogoImg(string $class = 'site-logo', ?string $alt = null): string
     return '<img src="' . e(siteLogoUrl()) . '" alt="' . e($alt ?? APP_NAME) . '" class="' . e($class) . '">';
 }
 
+function authPanelBrandHtml(?array $school = null): string
+{
+    if ($school !== null && ($school['status'] ?? '') === 'active') {
+        $logoUrl = schoolLogoImageUrl($school);
+        $name = (string) ($school['name'] ?? 'School');
+        if ($logoUrl !== null) {
+            return '<div class="auth-panel-school-logo">'
+                . '<img src="' . e($logoUrl) . '" alt="' . e($name) . ' logo" class="auth-panel-school-logo-img">'
+                . '</div>';
+        }
+
+        return '<div class="auth-panel-school-avatar" aria-hidden="true">' . e(schoolAvatarInitial($school)) . '</div>';
+    }
+
+    return siteLogoImg('site-logo site-logo--auth-panel');
+}
+
 function siteFaviconPath(): string
 {
     return 'assets/img/tab icon.png';
@@ -62,14 +79,30 @@ function studentCourseUrl(int $classId): string
     return url('student/course.php?id=' . $classId);
 }
 
-function schoolEnrollUrl(?string $schoolCode): string
+function schoolPageUrl(?string $schoolCode): string
 {
     $code = normalizeSchoolCode($schoolCode ?? '');
     if ($code === '') {
         return url('index.php#schools');
     }
 
-    return url('schools/' . rawurlencode($code) . '/enroll');
+    return url('schools/' . rawurlencode($code));
+}
+
+function schoolLoginUrl(?string $schoolCode): string
+{
+    $code = normalizeSchoolCode($schoolCode ?? '');
+    if ($code === '') {
+        return url('login.php');
+    }
+
+    return url('login.php?code=' . urlencode($code));
+}
+
+/** @deprecated Use schoolPageUrl() */
+function schoolEnrollUrl(?string $schoolCode): string
+{
+    return schoolPageUrl($schoolCode);
 }
 
 /** @return list<string> */

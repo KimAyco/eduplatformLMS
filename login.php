@@ -88,6 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $formAction = 'login.php';
 $backUrl = $schoolPreselected ? url('index.php#schools') : url('index.php');
+$authPanelClass = $schoolPreselected ? 'auth-split-panel auth-split-panel--school' : 'auth-split-panel auth-split-panel--platform';
+$authPanelCover = ($schoolPreselected && $school) ? schoolCoverImageUrl($school) : '';
+$authPanelStyle = $authPanelCover !== '' ? ' style="--auth-panel-cover: url(\'' . e($authPanelCover) . '\')"' : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -106,15 +109,31 @@ $backUrl = $schoolPreselected ? url('index.php#schools') : url('index.php');
 <?php require __DIR__ . '/includes/layout/page_loader.php'; ?>
 <div class="auth-page">
     <div class="auth-card-split">
-        <div class="auth-split-panel">
-            <?= siteLogoImg('site-logo site-logo--auth-panel') ?>
-            <?php if ($schoolPreselected): ?>
-                <h2><?= e($school['name']) ?></h2>
-                <p>Sign in to access your school portal. Enter your credentials to continue.</p>
-            <?php else: ?>
-                <h2><?= e(APP_NAME) ?></h2>
-                <p>Your way to knowledge. Sign in with your school code and credentials to access the learning portal.</p>
-            <?php endif; ?>
+        <div class="<?= e($authPanelClass) ?>"<?= $authPanelStyle ?>>
+            <div class="auth-split-panel-bg" aria-hidden="true">
+                <span class="auth-split-panel-orb auth-split-panel-orb--1"></span>
+                <span class="auth-split-panel-orb auth-split-panel-orb--2"></span>
+                <span class="auth-split-panel-orb auth-split-panel-orb--3"></span>
+            </div>
+            <div class="auth-split-panel-content">
+                <?= authPanelBrandHtml($schoolPreselected ? $school : null) ?>
+                <?php if ($schoolPreselected): ?>
+                    <?php if (!empty($school['school_code'])): ?>
+                        <span class="auth-panel-code"><i class="fa-solid fa-key"></i><?= e($school['school_code']) ?></span>
+                    <?php endif; ?>
+                    <h2><?= e($school['name']) ?></h2>
+                    <p class="auth-panel-tagline">Your learning portal — courses, assignments, and progress in one place.</p>
+                <?php else: ?>
+                    <span class="auth-panel-eyebrow">Welcome back</span>
+                    <h2><?= e(APP_NAME) ?></h2>
+                    <p class="auth-panel-tagline">Your way to knowledge. Connect with your school and pick up where you left off.</p>
+                    <ul class="auth-panel-features">
+                        <li><i class="fa-solid fa-school"></i><span>Find your school</span></li>
+                        <li><i class="fa-solid fa-graduation-cap"></i><span>Learn anywhere</span></li>
+                        <li><i class="fa-solid fa-shield-halved"></i><span>Secure sign-in</span></li>
+                    </ul>
+                <?php endif; ?>
+            </div>
         </div>
 
         <div class="auth-split-form">

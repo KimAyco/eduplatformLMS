@@ -15,8 +15,6 @@ $showFooter = true;
 $bodyClass = 'landing-page';
 $mainClass = 'landing-main';
 
-$totalSchoolCount = count($schools);
-
 require __DIR__ . '/includes/layout/header.php';
 
 foreach (getFlashes() as $type => $messages) {
@@ -33,11 +31,7 @@ foreach (getFlashes() as $type => $messages) {
             <div class="schools-section-head">
                 <div class="schools-section-title">
                     <h2><i class="fa-solid fa-school"></i> Registered Schools</h2>
-                    <?php if ($totalSchoolCount > 0): ?>
-                        <span class="schools-count-badge"><?= $totalSchoolCount ?> school<?= $totalSchoolCount !== 1 ? 's' : '' ?></span>
-                    <?php endif; ?>
                 </div>
-                <p class="schools-section-sub">Find your institution and sign in with your school code.</p>
             </div>
 
             <?php if (!empty($schools)): ?>
@@ -52,9 +46,6 @@ foreach (getFlashes() as $type => $messages) {
                             placeholder="Search by name, code, email, or location…"
                             autocomplete="off"
                         >
-                        <button type="button" class="schools-search-clear" id="schoolSearchClear" aria-label="Clear search" hidden>
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
                     </div>
                 </div>
             <?php endif; ?>
@@ -87,7 +78,8 @@ foreach (getFlashes() as $type => $messages) {
                     $cardClass = 'school-card-modern' . ($school['status'] !== 'active' ? ' is-' . e($school['status']) : '');
                     $cardAttrs = 'class="' . $cardClass . '" data-search="' . e($searchText) . '" data-status="' . e($school['status']) . '" data-landing-reveal data-landing-delay="' . (int) $revealDelay . '"';
                     $isActiveCard = $school['status'] === 'active' && !empty($school['school_code']);
-                    $schoolPageUrl = $isActiveCard ? schoolEnrollUrl($school['school_code']) : '';
+                    $schoolPageUrl = $isActiveCard ? schoolPageUrl($school['school_code']) : '';
+                    $schoolLoginUrl = $isActiveCard ? schoolLoginUrl($school['school_code']) : '';
                     $coverUrl = schoolCoverImageUrl($school);
                 ?>
                 <div class="school-card-wrap" data-school-id="<?= (int) $school['id'] ?>" data-order="<?= (int) $i ?>">
@@ -100,11 +92,7 @@ foreach (getFlashes() as $type => $messages) {
                     >
                         <i class="fa-solid fa-thumbtack"></i>
                     </button>
-                <?php if ($isActiveCard): ?>
-                <a href="<?= e($schoolPageUrl) ?>" <?= $cardAttrs ?>>
-                <?php else: ?>
                 <article <?= $cardAttrs ?>>
-                <?php endif; ?>
                     <div class="school-card-cover" style="background-image: url('<?= e($coverUrl) ?>')">
                         <span class="badge badge-<?= e($school['status']) ?> school-card-status"><?= e(SCHOOL_STATUSES[$school['status']] ?? ucfirst($school['status'])) ?></span>
                     </div>
@@ -120,6 +108,27 @@ foreach (getFlashes() as $type => $messages) {
                                 <?php endif; ?>
                             </div>
                         </div>
+                        <?php if ($isActiveCard): ?>
+                        <div class="school-card-footer">
+                            <div class="school-card-meta">
+                                <?php if ($school['address']): ?>
+                                    <p class="school-card-location"><i class="fa-solid fa-location-dot"></i><span><?= e($school['address']) ?></span></p>
+                                <?php elseif ($school['phone']): ?>
+                                    <p class="school-card-location"><i class="fa-solid fa-phone"></i><span><?= e($school['phone']) ?></span></p>
+                                <?php else: ?>
+                                    <p class="school-card-location"><i class="fa-solid fa-calendar"></i><span>Registered <?= formatDate($school['registered_at'], 'M j, Y') ?></span></p>
+                                <?php endif; ?>
+                            </div>
+                            <div class="school-card-actions">
+                                <a href="<?= e($schoolPageUrl) ?>" class="school-card-btn school-card-btn--page">
+                                    <i class="fa-solid fa-school"></i> School page
+                                </a>
+                                <a href="<?= e($schoolLoginUrl) ?>" class="school-card-btn school-card-btn--login">
+                                    <i class="fa-solid fa-right-to-bracket"></i> Sign in
+                                </a>
+                            </div>
+                        </div>
+                        <?php else: ?>
                         <div class="school-card-meta">
                             <?php if ($school['address']): ?>
                                 <p class="school-card-location"><i class="fa-solid fa-location-dot"></i><span><?= e($school['address']) ?></span></p>
@@ -129,17 +138,9 @@ foreach (getFlashes() as $type => $messages) {
                                 <p class="school-card-location"><i class="fa-solid fa-calendar"></i><span>Registered <?= formatDate($school['registered_at'], 'M j, Y') ?></span></p>
                             <?php endif; ?>
                         </div>
-                        <?php if ($isActiveCard): ?>
-                        <span class="school-card-cta">
-                            Go to school page <i class="fa-solid fa-arrow-right"></i>
-                        </span>
                         <?php endif; ?>
                     </div>
-                <?php if ($isActiveCard): ?>
-                </a>
-                <?php else: ?>
                 </article>
-                <?php endif; ?>
                 </div>
                 <?php endforeach; ?>
                 </div>

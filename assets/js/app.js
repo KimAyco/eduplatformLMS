@@ -188,13 +188,10 @@ function initSchoolSearch() {
     var input = document.getElementById('schoolSearch');
     var grid = document.getElementById('schoolGrid');
     var emptyState = document.getElementById('schoolSearchEmpty');
-    var clearBtn = document.getElementById('schoolSearchClear');
-    var countBadge = document.querySelector('.schools-count-badge');
     if (!input || !grid) return;
 
     var PIN_KEY = 'lms_pinned_schools';
     var wraps = Array.from(grid.querySelectorAll('.school-card-wrap'));
-    var totalCount = wraps.length;
 
     function getPinnedIds() {
         try {
@@ -301,16 +298,6 @@ function initSchoolSearch() {
         }
         grid.hidden = visibleCount === 0 && query !== '';
 
-        if (countBadge) {
-            if (query === '') {
-                countBadge.textContent = totalCount + ' school' + (totalCount !== 1 ? 's' : '');
-            } else {
-                countBadge.textContent = visibleCount + ' of ' + totalCount + ' school' + (totalCount !== 1 ? 's' : '');
-            }
-        }
-
-        if (clearBtn) clearBtn.hidden = query === '';
-
         if (query !== '' && visibleCount > 0) {
             grid.scrollLeft = 0;
         }
@@ -331,14 +318,6 @@ function initSchoolSearch() {
 
     input.addEventListener('input', filterSchools);
     input.addEventListener('search', filterSchools);
-
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function () {
-            input.value = '';
-            input.focus();
-            filterSchools();
-        });
-    }
 }
 
 function initSchoolCarousel() {
@@ -354,6 +333,12 @@ function initSchoolCarousel() {
     next.addEventListener('click', function () {
         grid.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     });
+
+    grid.addEventListener('wheel', function (e) {
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        window.scrollBy(0, e.deltaY);
+        e.preventDefault();
+    }, { passive: false });
 }
 
 function initLandingAnimations() {

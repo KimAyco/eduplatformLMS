@@ -1,6 +1,8 @@
 RewriteEngine On
 
-RewriteRule ^schools/([A-Za-z0-9_-]+)/enroll/?$ schools/enroll.php?code=$1 [L,QSA,NC]
+RewriteRule ^schools/([A-Za-z0-9_-]+)/enroll/?$ schools/$1 [R=301,L,NC]
+
+RewriteRule ^schools/([A-Za-z0-9_-]+)/?$ schools/enroll.php?code=$1 [L,QSA,NC]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
