@@ -1,8 +1,14 @@
 <?php
 
-function remember(string $key, callable $callback): mixed
+function &cacheStore(): array
 {
     static $store = [];
+    return $store;
+}
+
+function remember(string $key, callable $callback): mixed
+{
+    $store = &cacheStore();
     if (!array_key_exists($key, $store)) {
         $store[$key] = $callback();
     }
@@ -11,6 +17,6 @@ function remember(string $key, callable $callback): mixed
 
 function forgetCache(string $key): void
 {
-    static $store = [];
+    $store = &cacheStore();
     unset($store[$key]);
 }

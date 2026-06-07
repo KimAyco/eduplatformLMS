@@ -6,8 +6,9 @@ requireSchoolActive();
 $user = currentUser();
 $quizId = (int) ($_GET['id'] ?? 0);
 
-$stmt = db()->prepare('SELECT q.*, c.name AS class_name, g.name AS group_name FROM quizzes q
+$stmt = db()->prepare('SELECT q.*, sub.name AS name, sub.name AS class_name, g.name AS group_name FROM quizzes q
     INNER JOIN classes c ON c.id = q.class_id
+    INNER JOIN subjects sub ON sub.id = c.subject_id
     INNER JOIN class_groups g ON g.id = c.class_group_id
     WHERE q.id = ? AND q.teacher_id = ?');
 $stmt->execute([$quizId, $user['id']]);

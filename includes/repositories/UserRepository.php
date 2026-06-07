@@ -2,6 +2,13 @@
 
 class UserRepository
 {
+    public static function getByRole(int $userId, int $schoolId, string $role): ?array
+    {
+        $stmt = db()->prepare('SELECT * FROM users WHERE id = ? AND school_id = ? AND role = ?');
+        $stmt->execute([$userId, $schoolId, $role]);
+        return $stmt->fetch() ?: null;
+    }
+
     public static function paginatedByRole(int $schoolId, string $role, int $page = 1, int $perPage = 20): array
     {
         $offset = ($page - 1) * $perPage;

@@ -27,20 +27,10 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 </div>
 <?php else: ?>
 <div class="course-grid">
-    <?php foreach ($classes as $c): ?>
-    <a href="<?= teacherCourseUrl((int) $c['id']) ?>" class="course-card course-card-clickable">
-        <div class="course-card-header">
-            <h3><?= e($c['name']) ?></h3>
-            <?php if ($c['group_name']): ?><small><?= e($c['group_name']) ?></small><?php endif; ?>
-        </div>
-        <div class="course-card-body">
-            <p class="text-muted" style="font-size:.875rem;"><?= e($c['group_academic_year'] ?: 'Open course') ?></p>
-        </div>
-        <div class="course-card-footer">
-            <span class="course-open-link">Open course <i class="fa-solid fa-arrow-right"></i></span>
-        </div>
-    </a>
-    <?php endforeach; ?>
+    <?php foreach ($classes as $c):
+        $bodyHtml = '<p class="text-muted course-card-desc">' . e($c['group_academic_year'] ?: 'Open course') . '</p>';
+        renderCourseCard($c, teacherCourseUrl((int) $c['id']), $bodyHtml);
+    endforeach; ?>
 </div>
 <?php endif; ?>
 

@@ -87,6 +87,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Teacher status updated.');
         redirect('school/teachers.php');
     } elseif ($postAction === 'delete' && $userId) {
+        $target = UserRepository::getByRole($userId, $sid, 'teacher');
+        if ($target && !empty($target['profile_image'])) {
+            deleteUpload($target['profile_image']);
+        }
         $stmt = db()->prepare('DELETE FROM users WHERE id=? AND school_id=? AND role=?');
         $stmt->execute([$userId, $sid, 'teacher']);
         flash('success', 'Teacher removed.');
@@ -198,8 +202,8 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <thead><tr><th>Name</th><th>Email</th><th>Subjects</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
         <?php foreach ($teachers as $t): ?>
-            <tr>
-                <td><?= tableUserCell($t['first_name'], $t['last_name']) ?></td>
+            <tr class="table-row-link" data-href="<?= e(url('school/teacher.php?id=' . $t['id'])) ?>" tabindex="0">
+                <td><?= tableUserCell($t['first_name'], $t['last_name'], $t) ?></td>
                 <td><?= e($t['email']) ?></td>
                 <td>
                     <?php if (!empty($teacherSubjectMap[$t['id']])): ?>

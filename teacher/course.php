@@ -15,6 +15,7 @@ if (!$class) {
 
 $action = $_GET['action'] ?? '';
 $itemId = (int) ($_GET['item_id'] ?? 0);
+$sectionIdParam = (int) ($_GET['section_id'] ?? 0);
 $errors = [];
 $courseUrl = teacherCourseUrl($classId);
 
@@ -22,7 +23,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
     $postAction = $_POST['form_action'] ?? '';
 
-    if ($postAction === 'add_material' || $postAction === 'edit_material') {
+    if ($postAction === 'remove_class_cover') {
+        if (!empty($class['cover_image'])) {
+            deleteUpload($class['cover_image']);
+            db()->prepare('UPDATE classes SET cover_image = NULL WHERE id = ? AND school_id = ?')->execute([$classId, schoolId()]);
+            clearClassCoverCaches($classId, schoolId());
+        }
+        flash('success', 'Course cover removed.');
+        redirect('teacher/course.php?id=' . $classId . '&settings=1');
+    } elseif ($postAction === 'upload_class_cover') {
+        try {
+            $newPath = uploadClassCover($_FILES['cover'] ?? [], schoolId(), $classId);
+            if ($newPath === null) {
+                $errors[] = 'Please choose an image file to upload.';
+            } else {
+                if (!empty($class['cover_image'])) {
+                    deleteUpload($class['cover_image']);
+                }
+                db()->prepare('UPDATE classes SET cover_image = ? WHERE id = ? AND school_id = ?')->execute([$newPath, $classId, schoolId()]);
+                clearClassCoverCaches($classId, schoolId());
+                flash('success', 'Course cover updated.');
+                redirect('teacher/course.php?id=' . $classId . '&settings=1');
+            }
+        } catch (RuntimeException $e) {
+            $errors[] = $e->getMessage();
+        }
+    } elseif ($postAction === 'add_material' || $postAction === 'edit_material') {
         $title = trim($_POST['title'] ?? '');
         $body = trim($_POST['body'] ?? '');
         $link = trim($_POST['external_link'] ?? '');
@@ -38,8 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($_FILES['file']['name'])) {
                     $filePath = uploadFile($_FILES['file'], schoolId() . '/materials');
                 }
-                $stmt = db()->prepare('INSERT INTO materials (class_id, teacher_id, title, body, file_path, external_link) VALUES (?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$classId, $user['id'], $title, $body ?: null, $filePath, $link ?: null]);
+                $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
+                $stmt = db()->prepare('INSERT INTO materials (class_id, section_id, teacher_id, title, body, file_path, external_link) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$classId, $sectionId, $user['id'], $title, $body ?: null, $filePath, $link ?: null]);
                 flash('success', 'Material added.');
                 redirect('teacher/course.php?id=' . $classId);
             } catch (RuntimeException $e) {
@@ -59,8 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         deleteUpload($filePath);
                         $filePath = uploadFile($_FILES['file'], schoolId() . '/materials');
                     }
-                    $stmt = db()->prepare('UPDATE materials SET title=?, body=?, file_path=?, external_link=? WHERE id=? AND teacher_id=?');
-                    $stmt->execute([$title, $body ?: null, $filePath, $link ?: null, $materialId, $user['id']]);
+                    $stmt = db()->prepare('UPDATE materials SET title=?, body=?, file_path=?, external_link=?, section_id=? WHERE id=? AND teacher_id=?');
+                    $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
+                    $stmt->execute([$title, $body ?: null, $filePath, $link ?: null, $sectionId, $materialId, $user['id']]);
                     flash('success', 'Material updated.');
                     redirect('teacher/course.php?id=' . $classId);
                 } catch (RuntimeException $e) {
@@ -94,13 +122,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($postAction === 'add_assignment' && empty($errors)) {
-            $stmt = db()->prepare('INSERT INTO assignments (class_id, teacher_id, title, instructions, due_date, max_points, allow_late) VALUES (?, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([$classId, $user['id'], $title, $instructions ?: null, $dueDate ?: null, $maxPoints, $allowLate]);
+            $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
+            $stmt = db()->prepare('INSERT INTO assignments (class_id, section_id, teacher_id, title, instructions, due_date, max_points, allow_late) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([$classId, $sectionId, $user['id'], $title, $instructions ?: null, $dueDate ?: null, $maxPoints, $allowLate]);
             flash('success', 'Assignment created.');
             redirect('teacher/course.php?id=' . $classId);
         } elseif ($postAction === 'edit_assignment' && $assignmentId && empty($errors)) {
-            $stmt = db()->prepare('UPDATE assignments SET title=?, instructions=?, due_date=?, max_points=?, allow_late=? WHERE id=? AND class_id=? AND teacher_id=?');
-            $stmt->execute([$title, $instructions ?: null, $dueDate ?: null, $maxPoints, $allowLate, $assignmentId, $classId, $user['id']]);
+            $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
+            $stmt = db()->prepare('UPDATE assignments SET title=?, instructions=?, due_date=?, max_points=?, allow_late=?, section_id=? WHERE id=? AND class_id=? AND teacher_id=?');
+            $stmt->execute([$title, $instructions ?: null, $dueDate ?: null, $maxPoints, $allowLate, $sectionId, $assignmentId, $classId, $user['id']]);
             flash('success', 'Assignment updated.');
             redirect('teacher/course.php?id=' . $classId);
         } else {
@@ -128,14 +158,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($postAction === 'add_quiz' && empty($errors)) {
-            $stmt = db()->prepare('INSERT INTO quizzes (class_id, teacher_id, title, instructions, time_limit_minutes, due_date, max_attempts) VALUES (?, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([$classId, $user['id'], $title, $instructions ?: null, $timeLimit, $dueDate ?: null, $maxAttempts]);
+            $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
+            $stmt = db()->prepare('INSERT INTO quizzes (class_id, section_id, teacher_id, title, instructions, time_limit_minutes, due_date, max_attempts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([$classId, $sectionId, $user['id'], $title, $instructions ?: null, $timeLimit, $dueDate ?: null, $maxAttempts]);
             $newId = (int) db()->lastInsertId();
             flash('success', 'Quiz created. Add questions next.');
             redirect('teacher/quiz-edit.php?id=' . $newId . '&class_id=' . $classId);
         } elseif ($postAction === 'edit_quiz' && $quizId && empty($errors)) {
-            $stmt = db()->prepare('UPDATE quizzes SET title=?, instructions=?, time_limit_minutes=?, due_date=?, max_attempts=? WHERE id=? AND class_id=? AND teacher_id=?');
-            $stmt->execute([$title, $instructions ?: null, $timeLimit, $dueDate ?: null, $maxAttempts, $quizId, $classId, $user['id']]);
+            $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
+            $stmt = db()->prepare('UPDATE quizzes SET title=?, instructions=?, time_limit_minutes=?, due_date=?, max_attempts=?, section_id=? WHERE id=? AND class_id=? AND teacher_id=?');
+            $stmt->execute([$title, $instructions ?: null, $timeLimit, $dueDate ?: null, $maxAttempts, $sectionId, $quizId, $classId, $user['id']]);
             flash('success', 'Quiz updated.');
             redirect('teacher/course.php?id=' . $classId);
         } else {
@@ -149,12 +181,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare('DELETE FROM quizzes WHERE id=? AND class_id=? AND teacher_id=?')->execute([$quizId, $classId, $user['id']]);
         flash('success', 'Quiz deleted.');
         redirect('teacher/course.php?id=' . $classId);
+    } elseif ($postAction === 'add_section' || $postAction === 'edit_section') {
+        $sectionId = (int) ($_POST['section_id'] ?? 0);
+        $title = trim($_POST['title'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+
+        if ($title === '') {
+            $errors[] = 'Section title is required.';
+        } elseif ($postAction === 'add_section' && empty($errors)) {
+            CourseSectionRepository::create($classId, $title, $description ?: null);
+            flash('success', 'Lesson section added.');
+            redirect('teacher/course.php?id=' . $classId);
+        } elseif ($postAction === 'edit_section' && $sectionId && empty($errors)) {
+            if (CourseSectionRepository::update($sectionId, $classId, $title, $description ?: null)) {
+                flash('success', 'Lesson section updated.');
+            } else {
+                flash('error', 'Could not update section.');
+            }
+            redirect('teacher/course.php?id=' . $classId);
+        } else {
+            $action = $postAction === 'edit_section' ? 'edit_section' : 'add_section';
+            if ($sectionId) {
+                $sectionIdParam = $sectionId;
+            }
+        }
+    } elseif ($postAction === 'delete_section') {
+        $sectionId = (int) ($_POST['section_id'] ?? 0);
+        if (CourseSectionRepository::delete($sectionId, $classId)) {
+            flash('success', 'Lesson section deleted.');
+        } else {
+            flash('error', 'Could not delete section.');
+        }
+        redirect('teacher/course.php?id=' . $classId);
+    } elseif ($postAction === 'move_activity') {
+        $itemType = $_POST['item_type'] ?? '';
+        $itemId = (int) ($_POST['item_id'] ?? 0);
+        $targetSection = ($_POST['section_id'] ?? '') !== '' ? (int) $_POST['section_id'] : null;
+        if (CourseSectionRepository::moveItem($itemType, $itemId, $classId, $targetSection)) {
+            flash('success', 'Activity moved.');
+        } else {
+            flash('error', 'Could not move activity.');
+        }
+        redirect('teacher/course.php?id=' . $classId);
     }
 }
 
 $editMaterial = null;
 $editAssignment = null;
 $editQuiz = null;
+$editSection = null;
 
 if ($action === 'edit_material' && $itemId) {
     $stmt = db()->prepare('SELECT * FROM materials WHERE id=? AND class_id=? AND teacher_id=?');
@@ -177,30 +252,34 @@ if ($action === 'edit_quiz' && $itemId) {
         $editQuiz['due_date_local'] = date('Y-m-d\TH:i', strtotime($editQuiz['due_date']));
     }
 }
-
-$stmt = db()->prepare('SELECT * FROM materials WHERE class_id=? AND teacher_id=? ORDER BY created_at DESC');
-$stmt->execute([$classId, $user['id']]);
-$materials = $stmt->fetchAll();
-
-$stmt = db()->prepare('SELECT a.*, (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) AS submission_count FROM assignments a WHERE a.class_id=? AND a.teacher_id=? ORDER BY a.created_at DESC');
-$stmt->execute([$classId, $user['id']]);
-$assignments = $stmt->fetchAll();
-
-$stmt = db()->prepare('SELECT q.*, (SELECT COUNT(*) FROM quiz_questions WHERE quiz_id = q.id) AS question_count, (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id AND status != ?) AS attempt_count FROM quizzes q WHERE q.class_id=? AND q.teacher_id=? ORDER BY q.created_at DESC');
-$stmt->execute(['in_progress', $classId, $user['id']]);
-$quizzes = $stmt->fetchAll();
-
-$activities = [];
-foreach ($materials as $m) {
-    $activities[] = ['type' => 'material', 'sort' => strtotime($m['created_at']), 'item' => $m];
+if ($action === 'edit_section' && $sectionIdParam) {
+    $editSection = CourseSectionRepository::get($sectionIdParam, $classId);
+    if (!$editSection) {
+        flash('error', 'Section not found.');
+        redirect('teacher/course.php?id=' . $classId);
+    }
 }
-foreach ($assignments as $a) {
-    $activities[] = ['type' => 'assignment', 'sort' => strtotime($a['created_at']), 'item' => $a];
+
+$sections = CourseSectionRepository::forClass($classId);
+$courseContent = CourseSectionRepository::loadCourseContent($classId, null, (int) $user['id']);
+$materialCount = $courseContent['material_count'];
+$assignmentCount = $courseContent['assignment_count'];
+$quizCount = $courseContent['quiz_count'];
+$activityCount = $courseContent['activity_count'];
+$defaultFormSectionId = $sectionIdParam ?: ($sections[0]['id'] ?? null);
+$courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
+$formOpen = in_array($action, ['add_material', 'edit_material', 'add_assignment', 'edit_assignment', 'add_quiz', 'edit_quiz', 'add_section', 'edit_section'], true);
+$formType = '';
+if (str_contains($action, 'material')) {
+    $formType = 'material';
+} elseif (str_contains($action, 'assignment')) {
+    $formType = 'assignment';
+} elseif (str_contains($action, 'quiz')) {
+    $formType = 'quiz';
+} elseif (str_contains($action, 'section')) {
+    $formType = 'section';
 }
-foreach ($quizzes as $q) {
-    $activities[] = ['type' => 'quiz', 'sort' => strtotime($q['created_at']), 'item' => $q];
-}
-usort($activities, fn ($x, $y) => $y['sort'] <=> $x['sort']);
+$coverPreviewUrl = classCoverImageUrl($class);
 
 $classTitle = classDisplayName($class);
 $pageTitle = $classTitle;
@@ -214,36 +293,14 @@ $breadcrumbs = [
 ];
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
-
-$materialCount = count($materials);
-$assignmentCount = count($assignments);
-$quizCount = count($quizzes);
-$activityCount = count($activities);
-$courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
-$formOpen = in_array($action, ['add_material', 'edit_material', 'add_assignment', 'edit_assignment', 'add_quiz', 'edit_quiz'], true);
-$formType = '';
-if (str_contains($action, 'material')) {
-    $formType = 'material';
-} elseif (str_contains($action, 'assignment')) {
-    $formType = 'assignment';
-} elseif (str_contains($action, 'quiz')) {
-    $formType = 'quiz';
-}
-
-$groupedByType = ['material' => [], 'assignment' => [], 'quiz' => []];
-foreach ($activities as $act) {
-    $groupedByType[$act['type']][] = $act;
-}
-$defaultOpenSection = !empty($activities) ? $activities[0]['type'] : 'material';
-$sectionMeta = [
-    'material' => ['label' => 'Materials', 'icon' => 'fa-file-lines'],
-    'assignment' => ['label' => 'Assignments', 'icon' => 'fa-pen-to-square'],
-    'quiz' => ['label' => 'Quizzes', 'icon' => 'fa-circle-question'],
-];
 ?>
 
 <div class="course-view">
-    <section class="course-hero">
+    <section class="course-hero<?= classHasCustomCover($class) ? ' course-hero--custom-cover' : '' ?>" style="background-image: url('<?= e($coverPreviewUrl) ?>')" data-preview-cover>
+        <div class="course-hero-overlay" aria-hidden="true"></div>
+        <button type="button" class="course-hero-settings-btn" id="openCourseSettings" aria-label="Class settings" title="Class settings">
+            <i class="fa-solid fa-gear" aria-hidden="true"></i>
+        </button>
         <div class="course-hero-main">
             <a href="<?= url('teacher/dashboard.php') ?>" class="course-back-link"><i class="fa-solid fa-arrow-left"></i> My courses</a>
             <div class="course-hero-title-row">
@@ -266,30 +323,27 @@ $sectionMeta = [
         </div>
     </section>
 
-    <div class="course-layout">
-        <aside class="course-sidebar">
-            <h2 class="course-sidebar-title">Add to course</h2>
-            <p class="course-sidebar-hint">Choose what students will see in this class.</p>
-            <div class="activity-picker">
-                <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="activity-picker-card<?= $formType === 'material' ? ' is-active' : '' ?>">
-                    <span class="activity-picker-icon material"><i class="fa-solid fa-file-lines"></i></span>
-                    <span class="activity-picker-label">Material</span>
-                    <span class="activity-picker-desc">Files, links &amp; notes</span>
+    <div class="course-builder">
+        <div class="course-builder-group">
+            <span class="course-builder-label">Add content</span>
+            <div class="course-builder-actions">
+                <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="course-builder-btn course-builder-btn--material<?= $formType === 'material' ? ' is-active' : '' ?>">
+                    <i class="fa-solid fa-file-lines"></i> Material
                 </a>
-                <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="activity-picker-card<?= $formType === 'assignment' ? ' is-active' : '' ?>">
-                    <span class="activity-picker-icon assignment"><i class="fa-solid fa-pen-to-square"></i></span>
-                    <span class="activity-picker-label">Assignment</span>
-                    <span class="activity-picker-desc">Due dates &amp; submissions</span>
+                <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="course-builder-btn course-builder-btn--assignment<?= $formType === 'assignment' ? ' is-active' : '' ?>">
+                    <i class="fa-solid fa-pen-to-square"></i> Assignment
                 </a>
-                <a href="<?= teacherCourseUrl($classId, 'action=add_quiz') ?>" class="activity-picker-card<?= $formType === 'quiz' ? ' is-active' : '' ?>">
-                    <span class="activity-picker-icon quiz"><i class="fa-solid fa-circle-question"></i></span>
-                    <span class="activity-picker-label">Quiz</span>
-                    <span class="activity-picker-desc">Questions &amp; grading</span>
+                <a href="<?= teacherCourseUrl($classId, 'action=add_quiz') ?>" class="course-builder-btn course-builder-btn--quiz<?= $formType === 'quiz' ? ' is-active' : '' ?>">
+                    <i class="fa-solid fa-circle-question"></i> Quiz
                 </a>
             </div>
-        </aside>
+        </div>
+        <a href="<?= teacherCourseUrl($classId, 'action=add_section') ?>" class="course-builder-lesson<?= $formType === 'section' ? ' is-active' : '' ?>">
+            <i class="fa-solid fa-folder-plus"></i> New lesson
+        </a>
+    </div>
 
-        <div class="course-main">
+    <div class="course-main course-main--full">
             <?php if ($formOpen): ?>
             <section class="course-form-sheet course-form-sheet--<?= e($formType) ?>" id="courseFormPanel">
                 <div class="course-form-sheet-header">
@@ -300,6 +354,9 @@ $sectionMeta = [
                         <?php elseif ($formType === 'assignment'): ?>
                             <span class="course-form-sheet-badge assignment"><i class="fa-solid fa-pen-to-square"></i> Assignment</span>
                             <h2><?= $editAssignment ? 'Edit assignment' : 'New assignment' ?></h2>
+                        <?php elseif ($formType === 'section'): ?>
+                            <span class="course-form-sheet-badge section"><i class="fa-solid fa-folder-tree"></i> Lesson section</span>
+                            <h2><?= $editSection ? 'Edit section' : 'New lesson section' ?></h2>
                         <?php else: ?>
                             <span class="course-form-sheet-badge quiz"><i class="fa-solid fa-circle-question"></i> Quiz</span>
                             <h2><?= $editQuiz ? 'Edit quiz' : 'New quiz' ?></h2>
@@ -315,6 +372,14 @@ $sectionMeta = [
                     <input type="hidden" name="form_action" value="<?= $editMaterial ? 'edit_material' : 'add_material' ?>">
                     <?php if ($editMaterial): ?><input type="hidden" name="material_id" value="<?= (int) $editMaterial['id'] ?>"><?php endif; ?>
                     <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editMaterial['title'] ?? '') ?>" required placeholder="e.g. Week 1 lecture slides"></div>
+                    <?php if (!empty($sections)): ?>
+                    <div class="form-group">
+                        <label>Lesson section</label>
+                        <select name="section_id" class="form-control">
+                            <?= courseSectionOptions($sections, (int) ($editMaterial['section_id'] ?? $defaultFormSectionId ?: 0) ?: null) ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
                     <div class="form-group"><label>Description</label><textarea name="body" class="form-control" rows="3" placeholder="Optional instructions for students"><?= e($editMaterial['body'] ?? '') ?></textarea></div>
                     <div class="form-row">
                         <div class="form-group"><label>External link</label><input type="url" name="external_link" class="form-control" value="<?= e($editMaterial['external_link'] ?? '') ?>" placeholder="https://"></div>
@@ -339,6 +404,14 @@ $sectionMeta = [
                     <input type="hidden" name="form_action" value="<?= $editAssignment ? 'edit_assignment' : 'add_assignment' ?>">
                     <?php if ($editAssignment): ?><input type="hidden" name="assignment_id" value="<?= (int) $editAssignment['id'] ?>"><?php endif; ?>
                     <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editAssignment['title'] ?? '') ?>" required placeholder="e.g. Research paper"></div>
+                    <?php if (!empty($sections)): ?>
+                    <div class="form-group">
+                        <label>Lesson section</label>
+                        <select name="section_id" class="form-control">
+                            <?= courseSectionOptions($sections, (int) ($editAssignment['section_id'] ?? $defaultFormSectionId ?: 0) ?: null) ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
                     <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control" rows="4" placeholder="What should students submit?"><?= e($editAssignment['instructions'] ?? '') ?></textarea></div>
                     <div class="form-row">
                         <div class="form-group"><label>Due date</label><input type="datetime-local" name="due_date" class="form-control" value="<?= e($editAssignment['due_date_local'] ?? '') ?>"></div>
@@ -358,6 +431,14 @@ $sectionMeta = [
                     <input type="hidden" name="form_action" value="<?= $editQuiz ? 'edit_quiz' : 'add_quiz' ?>">
                     <?php if ($editQuiz): ?><input type="hidden" name="quiz_id" value="<?= (int) $editQuiz['id'] ?>"><?php endif; ?>
                     <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editQuiz['title'] ?? '') ?>" required placeholder="e.g. Midterm quiz"></div>
+                    <?php if (!empty($sections)): ?>
+                    <div class="form-group">
+                        <label>Lesson section</label>
+                        <select name="section_id" class="form-control">
+                            <?= courseSectionOptions($sections, (int) ($editQuiz['section_id'] ?? $defaultFormSectionId ?: 0) ?: null) ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
                     <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control" rows="3"><?= e($editQuiz['instructions'] ?? '') ?></textarea></div>
                     <div class="form-row">
                         <div class="form-group"><label>Time limit (min)</label><input type="number" name="time_limit_minutes" class="form-control" value="<?= e($editQuiz['time_limit_minutes'] ?? '') ?>" placeholder="Optional"></div>
@@ -371,129 +452,73 @@ $sectionMeta = [
                     </div>
                 </form>
                 <?php endif; ?>
+
+                <?php if ($action === 'add_section' || $editSection): ?>
+                <form method="post" class="course-form">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="form_action" value="<?= $editSection ? 'edit_section' : 'add_section' ?>">
+                    <?php if ($editSection): ?><input type="hidden" name="section_id" value="<?= (int) $editSection['id'] ?>"><?php endif; ?>
+                    <div class="form-group">
+                        <label>Section title</label>
+                        <input name="title" class="form-control" value="<?= e($editSection['title'] ?? '') ?>" required placeholder="e.g. Lesson 1 — Introduction">
+                    </div>
+                    <div class="form-group">
+                        <label>Description <span class="text-muted">(optional)</span></label>
+                        <textarea name="description" class="form-control" rows="2" placeholder="Brief overview of this lesson"><?= e($editSection['description'] ?? '') ?></textarea>
+                    </div>
+                    <div class="course-form-actions">
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save section</button>
+                        <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+                <?php endif; ?>
             </section>
             <?php endif; ?>
 
             <section class="course-content-section">
+                <?php
+                $lessonCount = count($sections);
+                $summaryParts = [];
+                if ($activityCount > 0) {
+                    $summaryParts[] = $activityCount . ' activit' . ($activityCount !== 1 ? 'ies' : 'y');
+                }
+                if ($lessonCount > 0) {
+                    $summaryParts[] = $lessonCount . ' lesson' . ($lessonCount !== 1 ? 's' : '');
+                }
+                $contentSummary = $summaryParts ? implode(' · ', $summaryParts) : 'Start building your course';
+                ?>
                 <div class="course-content-header">
-                    <h2><i class="fa-solid fa-book-open"></i> Course content</h2>
-                    <div style="display:flex;align-items:center;gap:0.75rem;">
-                        <?php if ($activityCount > 0): ?><span class="course-content-count"><?= $activityCount ?> item<?= $activityCount !== 1 ? 's' : '' ?></span><?php endif; ?>
-                        <button type="button" class="btn btn-primary btn-sm" id="openActivityModal"><i class="fa-solid fa-plus"></i> Add activity</button>
+                    <div class="course-content-intro">
+                        <h2>Course content</h2>
+                        <p class="course-content-summary"><?= e($contentSummary) ?></p>
                     </div>
                 </div>
 
-                <?php if (empty($activities)): ?>
+                <?php if ($activityCount === 0 && empty($sections)): ?>
                 <div class="course-empty">
                     <div class="course-empty-icon"><i class="fa-solid fa-folder-open"></i></div>
                     <h3>Build your course</h3>
-                    <p>Start by adding a material, assignment, or quiz. Everything you add appears here for enrolled students.</p>
+                    <p>Create lesson sections (e.g. Lesson 1, Lesson 2), then add materials, assignments, and quizzes to each section.</p>
                     <div class="course-empty-actions">
-                        <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="btn btn-primary btn-sm"><i class="fa-solid fa-file-lines"></i> Add material</a>
-                        <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen-to-square"></i> Add assignment</a>
+                        <a href="<?= teacherCourseUrl($classId, 'action=add_section') ?>" class="btn btn-primary btn-sm"><i class="fa-solid fa-folder-plus"></i> Add first section</a>
+                        <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-lines"></i> Add material</a>
                     </div>
                 </div>
                 <?php else: ?>
-                <?php foreach ($sectionMeta as $sectionKey => $meta):
-                    if (empty($groupedByType[$sectionKey])) continue;
-                    $isOpen = $sectionKey === $defaultOpenSection;
-                ?>
-                <div class="course-section<?= $isOpen ? ' is-open' : '' ?>" data-section="<?= e($sectionKey) ?>">
-                    <button type="button" class="course-section-header" data-accordion-btn>
-                        <span><i class="fa-solid <?= e($meta['icon']) ?> section-icon"></i><?= e($meta['label']) ?></span>
-                        <span class="section-count"><?= count($groupedByType[$sectionKey]) ?></span>
-                        <i class="fa-solid fa-chevron-down section-chevron"></i>
-                    </button>
-                    <div class="course-section-body">
-                <div class="activity-list">
-                    <?php foreach ($groupedByType[$sectionKey] as $act):
-                        $item = $act['item'];
-                        if ($act['type'] === 'material'): ?>
-                    <article class="activity-card activity-card--material">
-                        <div class="activity-card-icon"><i class="fa-solid fa-file-lines"></i></div>
-                        <div class="activity-card-body">
-                            <span class="activity-card-type">Material</span>
-                            <h3><?= e($item['title']) ?></h3>
-                            <?php if ($item['body']): ?><p><?= e(mb_strimwidth($item['body'], 0, 140, '…')) ?></p><?php endif; ?>
-                            <div class="activity-card-meta">
-                                <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-download"></i> Download</a><?php endif; ?>
-                                <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-link"></i> Open link</a><?php endif; ?>
-                                <span class="activity-meta-chip muted"><i class="fa-regular fa-clock"></i> <?= formatDate($item['created_at'], 'M j, Y') ?></span>
-                            </div>
-                        </div>
-                        <div class="activity-card-actions">
-                            <a href="<?= teacherCourseUrl($classId, 'action=edit_material&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                            <form method="post" data-confirm="Delete this material?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
-                        </div>
-                    </article>
-                        <?php elseif ($act['type'] === 'assignment'): ?>
-                    <article class="activity-card activity-card--assignment">
-                        <div class="activity-card-icon"><i class="fa-solid fa-pen-to-square"></i></div>
-                        <div class="activity-card-body">
-                            <span class="activity-card-type">Assignment</span>
-                            <h3><?= e($item['title']) ?></h3>
-                            <div class="activity-card-meta">
-                                <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> Due <?= formatDate($item['due_date'], 'M j, Y') ?></span>
-                                <span class="activity-meta-chip"><i class="fa-solid fa-star"></i> <?= e($item['max_points']) ?> pts</span>
-                                <span class="activity-meta-chip"><i class="fa-solid fa-inbox"></i> <?= (int) $item['submission_count'] ?> submitted</span>
-                            </div>
-                        </div>
-                        <div class="activity-card-actions">
-                            <a href="<?= url('teacher/grade-submissions.php?assignment_id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Grade</a>
-                            <a href="<?= teacherCourseUrl($classId, 'action=edit_assignment&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                            <form method="post" data-confirm="Delete this assignment?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_assignment"><input type="hidden" name="assignment_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
-                        </div>
-                    </article>
-                        <?php else: ?>
-                    <article class="activity-card activity-card--quiz">
-                        <div class="activity-card-icon"><i class="fa-solid fa-circle-question"></i></div>
-                        <div class="activity-card-body">
-                            <span class="activity-card-type">Quiz</span>
-                            <h3><?= e($item['title']) ?></h3>
-                            <div class="activity-card-meta">
-                                <span class="activity-meta-chip"><i class="fa-solid fa-list"></i> <?= (int) $item['question_count'] ?> questions</span>
-                                <span class="activity-meta-chip"><i class="fa-solid fa-users"></i> <?= (int) $item['attempt_count'] ?> attempts</span>
-                                <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> Due <?= formatDate($item['due_date'], 'M j, Y') ?></span>
-                            </div>
-                        </div>
-                        <div class="activity-card-actions">
-                            <a href="<?= url('teacher/quiz-edit.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-primary">Questions</a>
-                            <a href="<?= url('teacher/quiz-attempts.php?quiz_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary">Attempts</a>
-                            <a href="<?= teacherCourseUrl($classId, 'action=edit_quiz&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
-                            <form method="post" data-confirm="Delete this quiz?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_quiz"><input type="hidden" name="quiz_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
-                        </div>
-                    </article>
-                        <?php endif; ?>
-                    <?php endforeach; ?>
+                <div class="course-lessons">
+                    <?php renderCourseLessonSections($courseContent, $classId, 'teacher', $sections); ?>
                 </div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
                 <?php endif; ?>
             </section>
-        </div>
     </div>
 </div>
 
-<div class="activity-modal-overlay" id="activityModal" hidden>
-    <div class="activity-modal">
-        <button type="button" class="activity-modal-close" id="closeActivityModal" aria-label="Close">&times;</button>
-        <h3>Add to course</h3>
-        <p>Choose what students will see in this class.</p>
-        <div class="activity-modal-options">
-            <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="activity-modal-option">
-                <span class="activity-picker-icon material"><i class="fa-solid fa-file-lines"></i></span>
-                <span><strong>Material</strong><br><small>Files, links &amp; notes</small></span>
-            </a>
-            <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="activity-modal-option">
-                <span class="activity-picker-icon assignment"><i class="fa-solid fa-pen-to-square"></i></span>
-                <span><strong>Assignment</strong><br><small>Due dates &amp; submissions</small></span>
-            </a>
-            <a href="<?= teacherCourseUrl($classId, 'action=add_quiz') ?>" class="activity-modal-option">
-                <span class="activity-picker-icon quiz"><i class="fa-solid fa-circle-question"></i></span>
-                <span><strong>Quiz</strong><br><small>Questions &amp; grading</small></span>
-            </a>
-        </div>
+<div class="activity-modal-overlay course-settings-overlay" id="courseSettingsModal" hidden>
+    <div class="activity-modal course-settings-modal" role="dialog" aria-modal="true" aria-labelledby="courseSettingsTitle">
+        <button type="button" class="activity-modal-close" id="closeCourseSettingsModal" aria-label="Close">&times;</button>
+        <h3 id="courseSettingsTitle"><i class="fa-solid fa-gear"></i> Class settings</h3>
+        <p class="course-settings-modal-intro">Manage how this class appears on course cards.</p>
+        <?php require __DIR__ . '/../includes/layout/course_class_settings.php'; ?>
     </div>
 </div>
 

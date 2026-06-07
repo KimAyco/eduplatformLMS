@@ -223,11 +223,159 @@ function uploadSchoolLogo(array $file, int $schoolId): ?string
     return $schoolId . '/logos/' . $filename;
 }
 
+function userUploadPrefix(?int $schoolId): string
+{
+    return ($schoolId !== null && (int) $schoolId > 0) ? (string) (int) $schoolId : 'platform';
+}
+
+function userProfileImageUrl(array $user): ?string
+{
+    $custom = trim((string) ($user['profile_image'] ?? ''));
+    if ($custom === '') {
+        return null;
+    }
+
+    return url('user-photo.php?file=' . rawurlencode(ltrim($custom, '/')));
+}
+
+function uploadUserProfile(array $file, int $userId, ?int $schoolId): ?string
+{
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Profile photo upload failed.');
+    }
+
+    if ($file['size'] > 2 * 1024 * 1024) {
+        throw new RuntimeException('Profile photo must be 2 MB or smaller.');
+    }
+
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+        throw new RuntimeException('Profile photo must be JPG, PNG, WebP, or GIF.');
+    }
+
+    $prefix = userUploadPrefix($schoolId);
+    $dir = UPLOAD_DIR . '/' . $prefix . '/profiles';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $filename = 'profile-' . $userId . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $dest = $dir . '/' . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not save profile photo.');
+    }
+
+    return $prefix . '/profiles/' . $filename;
+}
+
+function removeUserProfileImage(array $user): void
+{
+    if (!empty($user['profile_image'])) {
+        deleteUpload($user['profile_image']);
+        db()->prepare('UPDATE users SET profile_image = NULL WHERE id = ?')->execute([(int) $user['id']]);
+    }
+}
+
+function userAvatarHtml(array $user, string $class = 'user-avatar'): string
+{
+    $photoUrl = userProfileImageUrl($user);
+    $tag = (str_contains($class, 'dashboard-welcome') || str_contains($class, 'user-profile-avatar')) ? 'div' : 'span';
+
+    if ($photoUrl !== null) {
+        return '<' . $tag . ' class="' . e($class) . ' user-avatar--image" aria-hidden="true">'
+            . '<img src="' . e($photoUrl) . '" alt="" class="user-avatar-img"></' . $tag . '>';
+    }
+
+    return '<' . $tag . ' class="' . e($class) . '" aria-hidden="true">' . e(userInitials($user)) . '</' . $tag . '>';
+}
+
 function classDisplayName(array $class): string
 {
     $name = $class['name'] ?? '';
     $group = $class['group_name'] ?? null;
     return $group ? $name . ' (' . $group . ')' : $name;
+}
+
+/** @return list<string> */
+function classDefaultCoverUrls(): array
+{
+    return schoolDefaultCoverUrls();
+}
+
+function classCoverImageUrl(array $class): string
+{
+    $custom = trim((string) ($class['cover_image'] ?? ''));
+    if ($custom !== '') {
+        return url('class-cover.php?file=' . rawurlencode(ltrim($custom, '/')));
+    }
+
+    $defaults = classDefaultCoverUrls();
+    $index = abs((int) ($class['id'] ?? 0)) % count($defaults);
+
+    return $defaults[$index];
+}
+
+function classHasCustomCover(array $class): bool
+{
+    return trim((string) ($class['cover_image'] ?? '')) !== '';
+}
+
+function uploadClassCover(array $file, int $schoolId, int $classId): ?string
+{
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Cover image upload failed.');
+    }
+
+    if ($file['size'] > 5 * 1024 * 1024) {
+        throw new RuntimeException('Cover image must be 5 MB or smaller.');
+    }
+
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+        throw new RuntimeException('Cover image must be JPG, PNG, WebP, or GIF.');
+    }
+
+    $dir = UPLOAD_DIR . '/' . $schoolId . '/class-covers';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $filename = 'cover-' . $classId . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $dest = $dir . '/' . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not save cover image.');
+    }
+
+    return $schoolId . '/class-covers/' . $filename;
+}
+
+function clearClassCoverCaches(int $classId, int $schoolId): void
+{
+    $class = ClassRepository::getWithGroup($classId, $schoolId);
+    if (!$class) {
+        return;
+    }
+
+    $teacher = ClassRepository::getAssignedTeacher($classId);
+    if ($teacher) {
+        forgetCache('teacher_classes_' . $teacher['id']);
+    }
+
+    $stmt = db()->prepare('SELECT student_id FROM class_group_students WHERE class_group_id = ?');
+    $stmt->execute([(int) $class['class_group_id']]);
+    foreach ($stmt->fetchAll() as $row) {
+        forgetCache('student_classes_' . $row['student_id']);
+    }
 }
 
 function redirect(string $path): never
@@ -439,11 +587,26 @@ function renderPagination(array $pager, string $baseUrl): string
     return ob_get_clean();
 }
 
-function tableUserCell(string $firstName, string $lastName): string
+function tableUserCell(string $firstName, string $lastName, ?array $user = null): string
+{
+    $name = trim($firstName . ' ' . $lastName);
+    if ($user !== null) {
+        return '<div class="table-user-cell">' . userAvatarHtml($user, 'table-avatar') . '<span class="table-user-name">' . e($name) . '</span></div>';
+    }
+
+    $initials = strtoupper(mb_substr($firstName, 0, 1) . mb_substr($lastName, 0, 1));
+    return '<div class="table-user-cell"><span class="table-avatar" aria-hidden="true">' . e($initials) . '</span><span class="table-user-name">' . e($name) . '</span></div>';
+}
+
+function tableUserCellLink(string $firstName, string $lastName, string $href): string
 {
     $name = trim($firstName . ' ' . $lastName);
     $initials = strtoupper(mb_substr($firstName, 0, 1) . mb_substr($lastName, 0, 1));
-    return '<div class="table-user-cell"><span class="table-avatar" aria-hidden="true">' . e($initials) . '</span><span class="table-user-name">' . e($name) . '</span></div>';
+    return '<a href="' . e($href) . '" class="table-user-link">'
+        . '<span class="table-user-cell">'
+        . '<span class="table-avatar" aria-hidden="true">' . e($initials) . '</span>'
+        . '<span class="table-user-name">' . e($name) . '</span>'
+        . '</span></a>';
 }
 
 function tableSubjectCell(string $name): string

@@ -67,6 +67,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Student removed from group.');
         redirect('school/class-group.php?id=' . $groupId . '&tab=students');
     }
+
+    if ($action === 'remove_class_cover') {
+        $classId = (int) ($_POST['class_id'] ?? 0);
+        $classRow = ClassRepository::getWithGroup($classId, $sid);
+        if ($classRow && !empty($classRow['cover_image'])) {
+            deleteUpload($classRow['cover_image']);
+            db()->prepare('UPDATE classes SET cover_image = NULL WHERE id = ? AND school_id = ?')->execute([$classId, $sid]);
+            clearClassCoverCaches($classId, $sid);
+            flash('success', 'Course cover removed.');
+        }
+        redirect('school/class-group.php?id=' . $groupId . '&tab=subjects');
+    }
+
+    if ($action === 'upload_class_cover') {
+        $classId = (int) ($_POST['class_id'] ?? 0);
+        $classRow = ClassRepository::getWithGroup($classId, $sid);
+        if (!$classRow) {
+            flash('error', 'Class offering not found.');
+            redirect('school/class-group.php?id=' . $groupId . '&tab=subjects');
+        }
+        try {
+            $newPath = uploadClassCover($_FILES['cover'] ?? [], $sid, $classId);
+            if ($newPath === null) {
+                flash('error', 'Please choose an image file to upload.');
+            } else {
+                if (!empty($classRow['cover_image'])) {
+                    deleteUpload($classRow['cover_image']);
+                }
+                db()->prepare('UPDATE classes SET cover_image = ? WHERE id = ? AND school_id = ?')->execute([$newPath, $classId, $sid]);
+                clearClassCoverCaches($classId, $sid);
+                flash('success', 'Course cover updated.');
+            }
+        } catch (RuntimeException $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('school/class-group.php?id=' . $groupId . '&tab=subjects');
+    }
 }
 
 $offerings = ClassGroupRepository::offerings($groupId, $sid);
@@ -142,11 +179,13 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Subject</th><th>Assigned teacher</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Subject</th><th>Assigned teacher</th><th>Card cover</th><th>Actions</th></tr></thead>
             <tbody>
             <?php if (empty($offerings)): ?>
-                <tr><td colspan="3" class="text-muted">No subjects in this group yet. Add subjects from your catalog above.</td></tr>
-            <?php else: foreach ($offerings as $o): ?>
+                <tr><td colspan="4" class="text-muted">No subjects in this group yet. Add subjects from your catalog above.</td></tr>
+            <?php else: foreach ($offerings as $o):
+                $offeringCoverUrl = classCoverImageUrl($o);
+            ?>
                 <tr>
                     <td><strong><?= e($o['name']) ?></strong></td>
                     <td>
@@ -166,6 +205,43 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                         <?php if (empty($teachersBySubject[$o['subject_id']] ?? [])): ?>
                             <small class="text-muted">No teachers can teach this subject. <a href="<?= url('school/teachers.php?action=add') ?>">Add or edit teachers</a>.</small>
                         <?php endif; ?>
+                    </td>
+                    <td>
+                        <details class="class-cover-details">
+                            <summary class="class-cover-summary">
+                                <span class="class-cover-thumb" style="background-image: url('<?= e($offeringCoverUrl) ?>')" aria-hidden="true"></span>
+                                <span class="class-cover-summary-label"><?= classHasCustomCover($o) ? 'Change cover' : 'Add cover' ?></span>
+                            </summary>
+                            <div class="class-cover-upload-panel panel-nested">
+                                <div class="class-cover-preview lms-course-card course-card<?= classHasCustomCover($o) ? ' course-card-has-cover' : '' ?>">
+                                    <div class="course-card-header" data-preview-cover style="background-image: url('<?= e($offeringCoverUrl) ?>')">
+                                        <div class="course-card-header-overlay" aria-hidden="true"></div>
+                                        <div class="course-card-header-content">
+                                            <span class="course-card-badge"><?= e($o['name']) ?></span>
+                                            <h3><?= e($o['name']) ?></h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <form method="post" enctype="multipart/form-data" data-upload-preview>
+                                    <?= csrfField() ?>
+                                    <input type="hidden" name="form_action" value="upload_class_cover">
+                                    <input type="hidden" name="class_id" value="<?= (int) $o['id'] ?>">
+                                    <div class="form-group">
+                                        <input type="file" name="cover" class="form-control" accept="image/jpeg,image/png,image/webp,image/gif" required data-preview-input data-preview-type="cover">
+                                    </div>
+                                    <p class="image-upload-preview-note" data-preview-note hidden>Preview updated. Save to upload.</p>
+                                    <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-upload"></i> Save cover</button>
+                                </form>
+                                <?php if (!empty($o['cover_image'])): ?>
+                                <form method="post" class="class-cover-remove" onsubmit="return confirm('Remove this course cover?');">
+                                    <?= csrfField() ?>
+                                    <input type="hidden" name="form_action" value="remove_class_cover">
+                                    <input type="hidden" name="class_id" value="<?= (int) $o['id'] ?>">
+                                    <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-trash"></i> Remove</button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
+                        </details>
                     </td>
                     <td class="actions">
                         <form method="post" style="display:inline" data-confirm="Remove this subject from the group?">

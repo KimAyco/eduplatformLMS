@@ -16,6 +16,7 @@ function superAdminMenu(): array
     return [
         ['key' => 'dashboard', 'label' => 'Dashboard', 'url' => 'superadmin/dashboard.php', 'icon' => 'fa-gauge'],
         ['key' => 'schools', 'label' => 'Schools', 'url' => 'superadmin/schools.php', 'icon' => 'fa-school'],
+        ['key' => 'profile', 'label' => 'My profile', 'url' => 'profile.php', 'icon' => 'fa-circle-user', 'bottom' => true],
     ];
 }
 
@@ -29,6 +30,7 @@ function schoolAdminMenu(): array
         ['key' => 'teachers', 'label' => 'Teachers', 'url' => 'school/teachers.php', 'icon' => 'fa-chalkboard-user'],
         ['key' => 'students', 'label' => 'Students', 'url' => 'school/students.php', 'icon' => 'fa-user-graduate'],
         ['key' => 'class_groups', 'label' => 'Class Groups', 'url' => 'school/class-groups.php', 'icon' => 'fa-layer-group'],
+        ['key' => 'profile', 'label' => 'My profile', 'url' => 'profile.php', 'icon' => 'fa-circle-user', 'bottom' => true],
         ['key' => 'settings', 'label' => 'Settings', 'url' => 'school/settings.php', 'icon' => 'fa-gear', 'bottom' => true],
     ];
 }
@@ -49,6 +51,7 @@ function teacherMenu(?int $pendingGrading = null): array
         ['key' => 'classes', 'label' => 'Classes', 'url' => 'teacher/classes.php', 'icon' => 'fa-book-open'],
         ['section' => 'Grading'],
         ['key' => 'grading', 'label' => 'Grade Submissions', 'url' => 'teacher/grade-submissions.php', 'icon' => 'fa-check-double'],
+        ['key' => 'profile', 'label' => 'My profile', 'url' => 'profile.php', 'icon' => 'fa-circle-user', 'bottom' => true],
     ];
     if ($pendingGrading !== null && $pendingGrading > 0) {
         foreach ($items as &$item) {
@@ -67,6 +70,7 @@ function studentMenu(): array
         ['section' => 'Overview'],
         ['key' => 'dashboard', 'label' => 'Dashboard', 'url' => 'student/dashboard.php', 'icon' => 'fa-gauge'],
         ['section' => 'Courses'],
-        ['key' => 'courses', 'label' => 'My courses', 'url' => 'student/dashboard.php#courses', 'icon' => 'fa-book-open'],
+        ['key' => 'courses', 'label' => 'My courses', 'url' => 'student/classes.php', 'icon' => 'fa-book-open'],
+        ['key' => 'profile', 'label' => 'My profile', 'url' => 'profile.php', 'icon' => 'fa-circle-user', 'bottom' => true],
     ];
 }

@@ -10,9 +10,10 @@ $filterClass = (int) ($_GET['class_id'] ?? 0);
 
 $materials = [];
 if (!empty($classIds)) {
-    $sql = 'SELECT m.*, c.name AS class_name, g.name AS group_name, u.first_name AS teacher_first, u.last_name AS teacher_last
+    $sql = 'SELECT m.*, sub.name AS name, sub.name AS class_name, g.name AS group_name, u.first_name AS teacher_first, u.last_name AS teacher_last
             FROM materials m
             INNER JOIN classes c ON c.id = m.class_id
+            INNER JOIN subjects sub ON sub.id = c.subject_id
             INNER JOIN class_groups g ON g.id = c.class_group_id
             INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
             INNER JOIN users u ON u.id = m.teacher_id

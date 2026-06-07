@@ -48,27 +48,35 @@ function schoolStatusActionButtons(array $school): string
 
     if ($school['status'] === 'pending') {
         ?>
-        <form method="post" class="inline-form">
+        <form method="post" class="inline-form superadmin-action-form">
             <?= csrfField() ?>
             <input type="hidden" name="school_id" value="<?= (int) $school['id'] ?>">
-            <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">Approve</button>
-            <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger">Reject</button>
+            <button type="submit" name="action" value="approve" class="superadmin-icon-btn superadmin-icon-btn--success" title="Approve">
+                <i class="fa-solid fa-check"></i>
+            </button>
+            <button type="submit" name="action" value="reject" class="superadmin-icon-btn superadmin-icon-btn--danger" title="Reject">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
         </form>
         <?php
     } elseif ($school['status'] === 'active') {
         ?>
-        <form method="post" class="inline-form">
+        <form method="post" class="inline-form superadmin-action-form">
             <?= csrfField() ?>
             <input type="hidden" name="school_id" value="<?= (int) $school['id'] ?>">
-            <button type="submit" name="action" value="suspend" class="btn btn-sm btn-danger">Suspend</button>
+            <button type="submit" name="action" value="suspend" class="superadmin-icon-btn superadmin-icon-btn--danger" title="Suspend">
+                <i class="fa-solid fa-ban"></i>
+            </button>
         </form>
         <?php
     } elseif (in_array($school['status'], ['suspended', 'rejected'], true)) {
         ?>
-        <form method="post" class="inline-form">
+        <form method="post" class="inline-form superadmin-action-form">
             <?= csrfField() ?>
             <input type="hidden" name="school_id" value="<?= (int) $school['id'] ?>">
-            <button type="submit" name="action" value="reactivate" class="btn btn-sm btn-success">Reactivate</button>
+            <button type="submit" name="action" value="reactivate" class="superadmin-icon-btn superadmin-icon-btn--success" title="Reactivate">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
         </form>
         <?php
     }

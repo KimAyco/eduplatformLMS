@@ -80,8 +80,9 @@ if ($action === 'edit' && $editId) {
 $classIds = array_column($classes, 'id');
 $materials = [];
 if (!empty($classIds)) {
-    $sql = 'SELECT m.*, c.name AS class_name, g.name AS group_name FROM materials m
+    $sql = 'SELECT m.*, sub.name AS name, sub.name AS class_name, g.name AS group_name FROM materials m
             INNER JOIN classes c ON c.id = m.class_id
+            INNER JOIN subjects sub ON sub.id = c.subject_id
             INNER JOIN class_groups g ON g.id = c.class_group_id
             WHERE m.teacher_id = ?';
     $params = [$user['id']];

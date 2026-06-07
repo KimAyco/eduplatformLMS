@@ -118,6 +118,17 @@ class ClassGroupRepository
             ->execute([$groupId, $studentId]);
     }
 
+    public static function groupsForStudent(int $studentId, int $schoolId): array
+    {
+        $stmt = db()->prepare('SELECT g.*, cgs.enrolled_at
+            FROM class_groups g
+            INNER JOIN class_group_students cgs ON cgs.class_group_id = g.id
+            WHERE cgs.student_id = ? AND g.school_id = ?
+            ORDER BY g.name');
+        $stmt->execute([$studentId, $schoolId]);
+        return $stmt->fetchAll();
+    }
+
     public static function groupsWithOfferingsCount(int $schoolId): int
     {
         $stmt = db()->prepare('SELECT COUNT(DISTINCT class_group_id) FROM classes WHERE school_id = ?');

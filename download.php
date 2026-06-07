@@ -20,6 +20,7 @@ if (!$fullPath || !$uploadRoot || !str_starts_with($fullPath, $uploadRoot) || !i
 
 $user = currentUser();
 $allowed = false;
+$row = null;
 
 if ($type === 'material') {
     $stmt = db()->prepare('SELECT m.*, c.school_id FROM materials m INNER JOIN classes c ON c.id = m.class_id WHERE m.file_path = ?');
@@ -58,10 +59,20 @@ if (!$allowed) {
 }
 
 $mime = mime_content_type($fullPath) ?: 'application/octet-stream';
-$filename = basename($fullPath);
+$extension = pathinfo($fullPath, PATHINFO_EXTENSION);
+$downloadName = basename($fullPath);
+
+if (!empty($row['title'])) {
+    $base = preg_replace('/[^\pL\pN\-_]+/u', '-', trim($row['title'])) ?: 'download';
+    $base = trim($base, '-');
+    $downloadName = $extension !== '' ? $base . '.' . $extension : $base;
+}
+
+$safeFilename = str_replace(['"', "\r", "\n"], '', $downloadName);
 
 header('Content-Type: ' . $mime);
-header('Content-Disposition: inline; filename="' . $filename . '"');
+header('Content-Disposition: attachment; filename="' . $safeFilename . '"');
 header('Content-Length: ' . filesize($fullPath));
+header('Cache-Control: private, no-cache');
 readfile($fullPath);
 exit;

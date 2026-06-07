@@ -5,11 +5,12 @@ requireSchoolActive();
 
 $user = currentUser();
 
-$stmt = db()->prepare('SELECT q.*, c.name AS class_name, g.name AS group_name,
+$stmt = db()->prepare('SELECT q.*, sub.name AS name, sub.name AS class_name, g.name AS group_name,
     (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id AND student_id = ? AND status != ?) AS attempt_count,
     (SELECT MAX(score) FROM quiz_attempts WHERE quiz_id = q.id AND student_id = ? AND status != ?) AS best_score
     FROM quizzes q
     INNER JOIN classes c ON c.id = q.class_id
+    INNER JOIN subjects sub ON sub.id = c.subject_id
     INNER JOIN class_groups g ON g.id = c.class_group_id
     INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
     ORDER BY q.due_date ASC, q.created_at DESC');

@@ -15,7 +15,11 @@ document.addEventListener('DOMContentLoaded', function () {
     initStudentTasks();
     initCourseAccordions();
     initActivityModal();
+    initCourseSettingsModal();
+    initSamePageHashLinks();
     initCoursePage();
+    initClickableTableRows();
+    initImageUploadPreviews();
 });
 
 function initDrawer() {
@@ -111,6 +115,7 @@ function initPageLoader() {
         if (!href || href.charAt(0) === '#' || link.target === '_blank' || link.hasAttribute('download')) return;
         if (href.indexOf('javascript:') === 0) return;
         if (link.hostname && link.hostname !== window.location.hostname) return;
+        if (isSamePageHashLink(link)) return;
 
         link.addEventListener('click', function (e) {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -422,21 +427,80 @@ function initCourseAccordions() {
         saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
     } catch (e) { saved = {}; }
 
-    document.querySelectorAll('.course-section').forEach(function (section) {
-        var id = section.dataset.section;
+    document.querySelectorAll('.course-section, .course-lesson').forEach(function (section) {
+        var id = section.dataset.section || section.dataset.lesson;
         var btn = section.querySelector('[data-accordion-btn]');
         if (!btn) return;
 
         if (saved[id] !== undefined) {
             section.classList.toggle('is-open', saved[id]);
+            btn.setAttribute('aria-expanded', saved[id] ? 'true' : 'false');
         }
 
         btn.addEventListener('click', function () {
             section.classList.toggle('is-open');
-            saved[id] = section.classList.contains('is-open');
+            var isOpen = section.classList.contains('is-open');
+            btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            saved[id] = isOpen;
             sessionStorage.setItem(storageKey, JSON.stringify(saved));
         });
     });
+}
+
+function isSamePageHashLink(link) {
+    var href = link.getAttribute('href');
+    if (!href || href.indexOf('#') === -1) return false;
+
+    var url;
+    try {
+        url = new URL(link.href, window.location.href);
+    } catch (e) {
+        return false;
+    }
+
+    return url.pathname === window.location.pathname
+        && url.search === window.location.search;
+}
+
+function scrollToPageHash(hash, behavior) {
+    if (!hash || hash === '#') return false;
+    var target = document.querySelector(hash);
+    if (!target) return false;
+    target.scrollIntoView({ behavior: behavior || 'smooth', block: 'start' });
+    return true;
+}
+
+function closeDrawerIfOpen() {
+    var drawer = document.getElementById('moodleDrawer');
+    var overlay = document.getElementById('drawerOverlay');
+    if (drawer) drawer.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
+}
+
+function initSamePageHashLinks() {
+    document.querySelectorAll('a[href*="#"]').forEach(function (link) {
+        if (!isSamePageHashLink(link)) return;
+
+        link.addEventListener('click', function (e) {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+            var url = new URL(link.href, window.location.href);
+            var hash = url.hash;
+            if (!hash) return;
+
+            e.preventDefault();
+            closeDrawerIfOpen();
+            if (scrollToPageHash(hash)) {
+                history.pushState(null, '', hash);
+            }
+        });
+    });
+
+    if (window.location.hash) {
+        requestAnimationFrame(function () {
+            scrollToPageHash(window.location.hash, 'auto');
+        });
+    }
 }
 
 function initActivityModal() {
@@ -455,6 +519,36 @@ function initActivityModal() {
     overlay.addEventListener('click', function (e) {
         if (e.target === overlay) close();
     });
+}
+
+function initCourseSettingsModal() {
+    var openBtn = document.getElementById('openCourseSettings');
+    var overlay = document.getElementById('courseSettingsModal');
+    var closeBtn = document.getElementById('closeCourseSettingsModal');
+    if (!overlay) return;
+
+    function open() {
+        overlay.hidden = false;
+        document.body.classList.add('modal-open');
+    }
+
+    function close() {
+        overlay.hidden = true;
+        document.body.classList.remove('modal-open');
+    }
+
+    if (openBtn) openBtn.addEventListener('click', open);
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) close();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !overlay.hidden) close();
+    });
+
+    if (new URLSearchParams(window.location.search).get('settings') === '1') {
+        open();
+    }
 }
 
 function initSchoolCodeSuggestion() {
@@ -517,4 +611,107 @@ function addToggleBtn(wrap, input) {
     });
 
     wrap.appendChild(btn);
+}
+
+function initClickableTableRows() {
+    document.querySelectorAll('tr.table-row-link[data-href]').forEach(function (row) {
+        row.addEventListener('click', function (e) {
+            if (isTableRowInteractiveTarget(e.target, row)) return;
+            window.location.href = row.getAttribute('data-href');
+        });
+        row.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            if (isTableRowInteractiveTarget(e.target, row)) return;
+            e.preventDefault();
+            window.location.href = row.getAttribute('data-href');
+        });
+    });
+}
+
+function isTableRowInteractiveTarget(target, row) {
+    var interactive = target.closest('a, button, input, select, textarea, label, .actions');
+    return interactive && row.contains(interactive);
+}
+
+function initImageUploadPreviews() {
+    document.querySelectorAll('input[data-preview-input]').forEach(function (input) {
+        input.addEventListener('change', function () {
+            var file = input.files && input.files[0];
+            var panel = input.closest('.panel, .panel-nested, .user-profile-photo-panel, .course-settings-modal, .course-settings-section') || document.body;
+            var form = input.closest('[data-upload-preview]') || panel;
+            var note = form.querySelector('[data-preview-note]');
+
+            if (!file || !file.type.match(/^image\//)) {
+                if (note) note.hidden = true;
+                panel.querySelectorAll('[data-preview-upload]').forEach(function (el) {
+                    el.hidden = true;
+                });
+                panel.querySelectorAll('[data-preview-image]').forEach(function (img) {
+                    img.removeAttribute('src');
+                });
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+                var url = ev.target.result;
+                var type = input.getAttribute('data-preview-type') || 'avatar';
+                var scope = input.getAttribute('data-preview-scope') || 'local';
+
+                if (type === 'cover') {
+                    document.querySelectorAll('[data-preview-cover]').forEach(function (el) {
+                        el.style.backgroundImage = "url('" + url + "')";
+                        el.classList.add('is-previewing');
+                        if (el.classList.contains('course-hero')) {
+                            el.classList.add('course-hero--custom-cover');
+                        }
+                    });
+                    panel.querySelectorAll('.course-appearance-preview-card').forEach(function (el) {
+                        el.classList.add('course-card-has-cover');
+                    });
+                    panel.querySelectorAll('[data-preview-upload]').forEach(function (el) {
+                        el.hidden = false;
+                    });
+                    panel.querySelectorAll('[data-preview-image]').forEach(function (img) {
+                        img.src = url;
+                    });
+                }
+
+                if (type === 'avatar') {
+                    var avatarTargets = scope === 'school-brand'
+                        ? document.querySelectorAll('[data-preview-avatar]')
+                        : panel.querySelectorAll('[data-preview-avatar]');
+
+                    avatarTargets.forEach(function (el) {
+                        applyAvatarPreview(el, url);
+                        el.classList.add('is-previewing');
+                    });
+                }
+
+                if (note) note.hidden = false;
+            };
+            reader.readAsDataURL(file);
+        });
+    });
+}
+
+function applyAvatarPreview(container, url) {
+    var el = container;
+    if (!el.matches('.school-avatar, .user-profile-avatar, .user-avatar, .table-avatar, .dashboard-welcome-avatar')) {
+        el = container.querySelector('.school-avatar, .user-profile-avatar, .user-avatar, .table-avatar, .dashboard-welcome-avatar');
+    }
+    if (!el) return;
+
+    var isSchool = el.classList.contains('school-avatar');
+    el.classList.add(isSchool ? 'school-avatar--image' : 'user-avatar--image');
+
+    var img = el.querySelector('img');
+    if (!img) {
+        img = document.createElement('img');
+        img.className = isSchool ? 'school-avatar-img' : 'user-avatar-img';
+        img.alt = '';
+        el.textContent = '';
+        el.appendChild(img);
+    }
+    img.src = url;
 }

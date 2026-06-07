@@ -45,6 +45,7 @@ if ($role === 'student') {
         </button>
         <a href="<?= url('index.php') ?>" class="navbar-brand">
             <?= siteLogoImg('site-logo site-logo--navbar') ?>
+            <span class="navbar-brand-name"><?= e(APP_NAME) ?></span>
         </a>
         <?php if ($user['school_name'] ?? null): ?>
             <span class="navbar-context"><?= e($user['school_name']) ?></span>
@@ -64,7 +65,7 @@ if ($role === 'student') {
         </div>
         <div class="user-menu" id="userMenu">
             <button type="button" class="user-menu-btn" id="userMenuBtn">
-                <span class="user-avatar"><?= e($initials) ?></span>
+                <?= userAvatarHtml($user, 'user-avatar') ?>
                 <span class="user-name"><?= e($user['first_name']) ?></span>
                 <i class="fa-solid fa-chevron-down"></i>
             </button>
@@ -73,6 +74,7 @@ if ($role === 'student') {
                     <strong><?= e($user['first_name'] . ' ' . $user['last_name']) ?></strong>
                     <span class="role-badge"><?= e(ROLES[$role] ?? $role) ?></span>
                 </div>
+                <a href="<?= url('profile.php') ?>"><i class="fa-solid fa-circle-user"></i> My profile</a>
                 <a href="<?= url('index.php') ?>"><i class="fa-solid fa-house"></i> Back to home</a>
                 <a href="<?= url('logout.php') ?>"><i class="fa-solid fa-right-from-bracket"></i> Log out</a>
             </div>

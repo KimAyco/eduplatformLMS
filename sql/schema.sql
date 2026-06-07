@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS quizzes;
 DROP TABLE IF EXISTS assignment_submissions;
 DROP TABLE IF EXISTS assignments;
 DROP TABLE IF EXISTS materials;
+DROP TABLE IF EXISTS course_sections;
 DROP TABLE IF EXISTS class_group_students;
 DROP TABLE IF EXISTS class_teachers;
 DROP TABLE IF EXISTS teacher_subjects;
@@ -51,6 +52,7 @@ CREATE TABLE users (
     role ENUM('super_admin', 'school_admin', 'teacher', 'student') NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
+    profile_image VARCHAR(512) DEFAULT NULL,
     status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -92,6 +94,7 @@ CREATE TABLE classes (
     school_id INT UNSIGNED NOT NULL,
     class_group_id INT UNSIGNED NOT NULL,
     subject_id INT UNSIGNED NOT NULL,
+    cover_image VARCHAR(512) DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_classes_group_subject (class_group_id, subject_id),
@@ -133,9 +136,22 @@ CREATE TABLE class_group_students (
     CONSTRAINT fk_cgs_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE course_sections (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    class_id INT UNSIGNED NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT DEFAULT NULL,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_course_sections_class (class_id),
+    CONSTRAINT fk_course_sections_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE materials (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     class_id INT UNSIGNED NOT NULL,
+    section_id INT UNSIGNED DEFAULT NULL,
     teacher_id INT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
     body TEXT DEFAULT NULL,
@@ -144,13 +160,16 @@ CREATE TABLE materials (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_materials_class (class_id),
+    KEY idx_materials_section (section_id),
     CONSTRAINT fk_materials_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_materials_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE SET NULL,
     CONSTRAINT fk_materials_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE assignments (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     class_id INT UNSIGNED NOT NULL,
+    section_id INT UNSIGNED DEFAULT NULL,
     teacher_id INT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
     instructions TEXT DEFAULT NULL,
@@ -160,7 +179,9 @@ CREATE TABLE assignments (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_assignments_class (class_id),
+    KEY idx_assignments_section (section_id),
     CONSTRAINT fk_assignments_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_assignments_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE SET NULL,
     CONSTRAINT fk_assignments_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -184,6 +205,7 @@ CREATE TABLE assignment_submissions (
 CREATE TABLE quizzes (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     class_id INT UNSIGNED NOT NULL,
+    section_id INT UNSIGNED DEFAULT NULL,
     teacher_id INT UNSIGNED NOT NULL,
     title VARCHAR(255) NOT NULL,
     instructions TEXT DEFAULT NULL,
@@ -193,7 +215,9 @@ CREATE TABLE quizzes (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_quizzes_class (class_id),
+    KEY idx_quizzes_section (section_id),
     CONSTRAINT fk_quizzes_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_quizzes_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE SET NULL,
     CONSTRAINT fk_quizzes_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

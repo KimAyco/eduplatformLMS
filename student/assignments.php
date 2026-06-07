@@ -55,8 +55,9 @@ if ($assignmentId && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($assignmentId) {
-    $stmt = db()->prepare('SELECT a.*, c.name AS class_name, g.name AS group_name FROM assignments a
+    $stmt = db()->prepare('SELECT a.*, sub.name AS name, sub.name AS class_name, g.name AS group_name FROM assignments a
         INNER JOIN classes c ON c.id = a.class_id
+        INNER JOIN subjects sub ON sub.id = c.subject_id
         INNER JOIN class_groups g ON g.id = c.class_group_id
         INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
         WHERE a.id = ?');
@@ -117,12 +118,13 @@ if ($assignmentId) {
     exit;
 }
 
-$stmt = db()->prepare('SELECT a.*, c.name AS class_name, g.name AS group_name, s.id AS submission_id, s.status AS submission_status, s.grade
+$stmt = db()->prepare('SELECT a.*, sub.name AS name, sub.name AS class_name, g.name AS group_name, asub.id AS submission_id, asub.status AS submission_status, asub.grade
     FROM assignments a
     INNER JOIN classes c ON c.id = a.class_id
+    INNER JOIN subjects sub ON sub.id = c.subject_id
     INNER JOIN class_groups g ON g.id = c.class_group_id
     INNER JOIN class_group_students cgs ON cgs.class_group_id = c.class_group_id AND cgs.student_id = ?
-    LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.student_id = ?
+    LEFT JOIN assignment_submissions asub ON asub.assignment_id = a.id AND asub.student_id = ?
     ORDER BY a.due_date ASC');
 $stmt->execute([$user['id'], $user['id']]);
 $assignments = $stmt->fetchAll();

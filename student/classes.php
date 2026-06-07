@@ -5,30 +5,36 @@ requireSchoolActive();
 
 $classes = getStudentClasses();
 
-$pageTitle = 'My Classes';
-$pageHeading = 'My Classes';
-$activeMenu = 'classes';
+$pageTitle = 'My courses';
+$pageHeading = 'My courses';
+$pageSubtitle = 'All classes you are enrolled in this term.';
+$activeMenu = 'courses';
 $menuItems = studentMenu();
+$breadcrumbs = [
+    ['label' => 'Dashboard', 'url' => 'student/dashboard.php'],
+    ['label' => 'My courses', 'url' => 'student/classes.php'],
+];
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
-<div class="table-wrap">
-    <table>
-        <thead><tr><th>Subject</th><th>Group</th><th>Description</th><th>Academic Year</th></tr></thead>
-        <tbody>
-        <?php if (empty($classes)): ?>
-            <tr><td colspan="4" class="text-muted">No classes enrolled.</td></tr>
-        <?php else: foreach ($classes as $c): ?>
-            <tr>
-                <td><?= e($c['name']) ?></td>
-                <td><?= e($c['group_name'] ?: '—') ?></td>
-                <td><?= e($c['description'] ?: '—') ?></td>
-                <td><?= e($c['group_academic_year'] ?: '—') ?></td>
-            </tr>
-        <?php endforeach; endif; ?>
-        </tbody>
-    </table>
+<?php if (empty($classes)): ?>
+<div class="empty-state">
+    <i class="fa-solid fa-book-open"></i>
+    <h3>No courses yet</h3>
+    <p>You are not enrolled in any classes. Contact your school administrator.</p>
 </div>
+<?php else: ?>
+<div class="course-grid">
+    <?php foreach ($classes as $c):
+        if (!empty($c['description'])) {
+            $bodyHtml = '<p class="text-muted course-card-desc">' . e(mb_strimwidth($c['description'], 0, 100, '…')) . '</p>';
+        } else {
+            $bodyHtml = '<p class="text-muted course-card-desc">' . e($c['group_academic_year'] ?: 'Open course') . '</p>';
+        }
+        renderCourseCard($c, studentCourseUrl((int) $c['id']), $bodyHtml);
+    endforeach; ?>
+</div>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/layout/dashboard_footer.php'; ?>

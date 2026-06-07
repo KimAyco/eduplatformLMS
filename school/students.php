@@ -69,6 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Student status updated.');
         redirect('school/students.php');
     } elseif ($postAction === 'delete' && $userId) {
+        $target = UserRepository::getByRole($userId, $sid, 'student');
+        if ($target && !empty($target['profile_image'])) {
+            deleteUpload($target['profile_image']);
+        }
         $stmt = db()->prepare('DELETE FROM users WHERE id=? AND school_id=? AND role=?');
         $stmt->execute([$userId, $sid, 'student']);
         flash('success', 'Student removed.');
@@ -138,8 +142,8 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
         <?php foreach ($students as $s): ?>
-            <tr>
-                <td><?= tableUserCell($s['first_name'], $s['last_name']) ?></td>
+            <tr class="table-row-link" data-href="<?= e(url('school/student.php?id=' . $s['id'])) ?>" tabindex="0">
+                <td><?= tableUserCell($s['first_name'], $s['last_name'], $s) ?></td>
                 <td><?= e($s['email']) ?></td>
                 <td><span class="badge badge-<?= $s['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($s['status'])) ?></span></td>
                 <td class="actions">

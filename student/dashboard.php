@@ -92,7 +92,7 @@ require __DIR__ . '/../includes/layout/dashboard_welcome.php';
 </div>
 <?php endif; ?>
 
-<h2 class="mb-1" id="courses" style="font-size:1.1rem;font-weight:700;">My courses</h2>
+<h2 class="mb-1 page-section-title" id="courses">My courses</h2>
 
 <?php if (empty($classes)): ?>
 <div class="empty-state">
@@ -102,21 +102,14 @@ require __DIR__ . '/../includes/layout/dashboard_welcome.php';
 </div>
 <?php else: ?>
 <div class="course-grid">
-    <?php foreach ($classes as $c): ?>
-    <a href="<?= studentCourseUrl((int) $c['id']) ?>" class="course-card course-card-clickable">
-        <div class="course-card-header">
-            <h3><?= e($c['name']) ?></h3>
-            <?php if ($c['group_name']): ?><small><?= e($c['group_name']) ?></small><?php endif; ?>
-        </div>
-        <div class="course-card-body">
-            <?php if ($c['description']): ?><p class="text-muted" style="font-size:.875rem;"><?= e(mb_strimwidth($c['description'], 0, 100, '...')) ?></p><?php else: ?>
-            <p class="text-muted" style="font-size:.875rem;"><?= e($c['group_academic_year'] ?: 'Open course') ?></p><?php endif; ?>
-        </div>
-        <div class="course-card-footer">
-            <span class="course-open-link">Open course <i class="fa-solid fa-arrow-right"></i></span>
-        </div>
-    </a>
-    <?php endforeach; ?>
+    <?php foreach ($classes as $c):
+        if (!empty($c['description'])) {
+            $bodyHtml = '<p class="text-muted course-card-desc">' . e(mb_strimwidth($c['description'], 0, 100, '…')) . '</p>';
+        } else {
+            $bodyHtml = '<p class="text-muted course-card-desc">' . e($c['group_academic_year'] ?: 'Open course') . '</p>';
+        }
+        renderCourseCard($c, studentCourseUrl((int) $c['id']), $bodyHtml);
+    endforeach; ?>
 </div>
 <?php endif; ?>
 
