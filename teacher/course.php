@@ -4,7 +4,7 @@ requireRole('teacher');
 requireSchoolActive();
 
 $user = currentUser();
-$classId = (int) ($_GET['id'] ?? 0);
+$classId = (int) ($_GET['id'] ?? $_POST['class_id'] ?? 0);
 requireClassAccess($classId, 'teacher');
 
 $class = getClass($classId);
@@ -19,11 +19,17 @@ $sectionIdParam = (int) ($_GET['section_id'] ?? 0);
 $errors = [];
 $courseUrl = teacherCourseUrl($classId);
 
+if ($action === 'edit_quiz' && $itemId) {
+    redirect(quizEditUrl($itemId, $classId, 'settings'));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
     $postAction = $_POST['form_action'] ?? '';
-
-    if ($postAction === 'remove_class_cover') {
+    $wizQuizId = (int) ($_POST['quiz_id'] ?? $_GET['quiz'] ?? 0);
+    if ($wizQuizId && handleQuizWizardPost($postAction, $wizQuizId, $classId, (int) $user['id'], $errors)) {
+        // Quiz wizard action handled, or validation errors collected for re-render.
+    } elseif ($postAction === 'remove_class_cover') {
         if (!empty($class['cover_image'])) {
             deleteUpload($class['cover_image']);
             db()->prepare('UPDATE classes SET cover_image = NULL WHERE id = ? AND school_id = ?')->execute([$classId, schoolId()]);
@@ -51,22 +57,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($postAction === 'add_material' || $postAction === 'edit_material') {
         $title = trim($_POST['title'] ?? '');
         $body = trim($_POST['body'] ?? '');
-        $link = trim($_POST['external_link'] ?? '');
+        $matType = normalizeMaterialType($_POST['material_type'] ?? 'file');
+        $link = normalizeExternalUrl(trim($_POST['external_link'] ?? ''));
+        $fileAccess = ($_POST['file_access_mode'] ?? 'downloadable') === 'view_only' ? 'view_only' : 'downloadable';
         $materialId = (int) ($_POST['material_id'] ?? 0);
 
         if ($title === '') {
             $errors[] = 'Title is required.';
         }
+        if ($matType === 'link' && $link === '') {
+            $errors[] = 'URL is required for link materials.';
+        }
+        if ($matType === 'file' && $postAction === 'add_material' && empty($_FILES['file']['name'])) {
+            $errors[] = 'Please choose a file to upload.';
+        }
 
         if ($postAction === 'add_material' && empty($errors)) {
             try {
-                $filePath = null;
-                if (!empty($_FILES['file']['name'])) {
-                    $filePath = uploadFile($_FILES['file'], schoolId() . '/materials');
-                }
                 $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
-                $stmt = db()->prepare('INSERT INTO materials (class_id, section_id, teacher_id, title, body, file_path, external_link) VALUES (?, ?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$classId, $sectionId, $user['id'], $title, $body ?: null, $filePath, $link ?: null]);
+                if ($matType === 'doc') {
+                    $id = MaterialRepository::create([
+                        'class_id' => $classId,
+                        'section_id' => $sectionId,
+                        'teacher_id' => $user['id'],
+                        'type' => 'doc',
+                        'title' => $title,
+                        'body' => $body ?: null,
+                        'file_access_mode' => 'downloadable',
+                    ]);
+                    flash('success', 'Document created. Add content below.');
+                    redirect('teacher/material-editor.php?id=' . $id . '&class_id=' . $classId);
+                }
+                $filePath = null;
+                $originalName = null;
+                $mimeType = null;
+                $fileSize = 0;
+                if ($matType === 'file' && !empty($_FILES['file']['name'])) {
+                    $meta = uploadFileWithMeta($_FILES['file'], schoolId() . '/materials');
+                    $filePath = $meta['path'];
+                    $originalName = $meta['original_name'];
+                    $mimeType = $meta['mime_type'];
+                    $fileSize = $meta['file_size'];
+                }
+                MaterialRepository::create([
+                    'class_id' => $classId,
+                    'section_id' => $sectionId,
+                    'teacher_id' => $user['id'],
+                    'type' => $matType,
+                    'title' => $title,
+                    'content' => $matType === 'link' ? $link : null,
+                    'body' => $body ?: null,
+                    'file_path' => $filePath,
+                    'original_name' => $originalName,
+                    'mime_type' => $mimeType,
+                    'file_size' => $fileSize,
+                    'external_link' => $matType === 'link' ? $link : null,
+                    'file_access_mode' => $matType === 'file' ? $fileAccess : 'downloadable',
+                ]);
                 flash('success', 'Material added.');
                 redirect('teacher/course.php?id=' . $classId);
             } catch (RuntimeException $e) {
@@ -74,21 +121,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $action = 'add_material';
             }
         } elseif ($postAction === 'edit_material' && $materialId && empty($errors)) {
-            $stmt = db()->prepare('SELECT * FROM materials WHERE id=? AND class_id=? AND teacher_id=?');
-            $stmt->execute([$materialId, $classId, $user['id']]);
-            $mat = $stmt->fetch();
-            if (!$mat) {
+            $mat = MaterialRepository::findForTeacher($materialId, $user['id']);
+            if (!$mat || (int) $mat['class_id'] !== $classId) {
                 $errors[] = 'Material not found.';
             } else {
                 try {
-                    $filePath = $mat['file_path'];
-                    if (!empty($_FILES['file']['name'])) {
-                        deleteUpload($filePath);
-                        $filePath = uploadFile($_FILES['file'], schoolId() . '/materials');
+                    $matType = normalizeMaterialType($_POST['material_type'] ?? $mat['type']);
+                    if ($matType === 'doc') {
+                        redirect('teacher/material-editor.php?id=' . $materialId . '&class_id=' . $classId);
                     }
-                    $stmt = db()->prepare('UPDATE materials SET title=?, body=?, file_path=?, external_link=?, section_id=? WHERE id=? AND teacher_id=?');
+                    $filePath = $mat['file_path'];
+                    $originalName = $mat['original_name'];
+                    $mimeType = $mat['mime_type'];
+                    $fileSize = (int) $mat['file_size'];
+                    if ($matType === 'file' && !empty($_FILES['file']['name'])) {
+                        deleteUpload($filePath);
+                        $meta = uploadFileWithMeta($_FILES['file'], schoolId() . '/materials');
+                        $filePath = $meta['path'];
+                        $originalName = $meta['original_name'];
+                        $mimeType = $meta['mime_type'];
+                        $fileSize = $meta['file_size'];
+                    }
                     $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
-                    $stmt->execute([$title, $body ?: null, $filePath, $link ?: null, $sectionId, $materialId, $user['id']]);
+                    MaterialRepository::update($materialId, [
+                        'type' => $matType,
+                        'title' => $title,
+                        'content' => $matType === 'link' ? $link : ($mat['content'] ?? null),
+                        'body' => $body ?: null,
+                        'file_path' => $matType === 'file' ? $filePath : null,
+                        'original_name' => $originalName,
+                        'mime_type' => $mimeType,
+                        'file_size' => $fileSize,
+                        'external_link' => $matType === 'link' ? $link : null,
+                        'file_access_mode' => $matType === 'file' ? $fileAccess : 'downloadable',
+                        'section_id' => $sectionId,
+                    ]);
                     flash('success', 'Material updated.');
                     redirect('teacher/course.php?id=' . $classId);
                 } catch (RuntimeException $e) {
@@ -100,12 +167,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($postAction === 'delete_material') {
         $materialId = (int) ($_POST['material_id'] ?? 0);
-        $stmt = db()->prepare('SELECT * FROM materials WHERE id=? AND class_id=? AND teacher_id=?');
-        $stmt->execute([$materialId, $classId, $user['id']]);
-        $mat = $stmt->fetch();
-        if ($mat) {
-            deleteUpload($mat['file_path']);
-            db()->prepare('DELETE FROM materials WHERE id=?')->execute([$materialId]);
+        $mat = MaterialRepository::findForTeacher($materialId, $user['id']);
+        if ($mat && (int) $mat['class_id'] === $classId) {
+            MaterialRepository::delete($materialId);
             flash('success', 'Material deleted.');
         }
         redirect('teacher/course.php?id=' . $classId);
@@ -145,36 +209,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare('DELETE FROM assignments WHERE id=? AND class_id=? AND teacher_id=?')->execute([$assignmentId, $classId, $user['id']]);
         flash('success', 'Assignment deleted.');
         redirect('teacher/course.php?id=' . $classId);
-    } elseif ($postAction === 'add_quiz' || $postAction === 'edit_quiz') {
+    } elseif ($postAction === 'add_quiz') {
         $title = trim($_POST['title'] ?? '');
-        $instructions = trim($_POST['instructions'] ?? '');
-        $timeLimit = $_POST['time_limit_minutes'] !== '' ? (int) $_POST['time_limit_minutes'] : null;
-        $dueDate = trim($_POST['due_date'] ?? '');
-        $maxAttempts = max(1, (int) ($_POST['max_attempts'] ?? 1));
-        $quizId = (int) ($_POST['quiz_id'] ?? 0);
 
         if ($title === '') {
             $errors[] = 'Title is required.';
         }
 
-        if ($postAction === 'add_quiz' && empty($errors)) {
+        if (empty($errors)) {
             $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
-            $stmt = db()->prepare('INSERT INTO quizzes (class_id, section_id, teacher_id, title, instructions, time_limit_minutes, due_date, max_attempts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([$classId, $sectionId, $user['id'], $title, $instructions ?: null, $timeLimit, $dueDate ?: null, $maxAttempts]);
+            $stmt = db()->prepare('INSERT INTO quizzes (class_id, section_id, teacher_id, title, is_published, show_score_to_students, max_attempts) VALUES (?, ?, ?, ?, 0, 1, 1)');
+            $stmt->execute([$classId, $sectionId, $user['id'], $title]);
             $newId = (int) db()->lastInsertId();
-            flash('success', 'Quiz created. Add questions next.');
-            redirect('teacher/quiz-edit.php?id=' . $newId . '&class_id=' . $classId);
-        } elseif ($postAction === 'edit_quiz' && $quizId && empty($errors)) {
-            $sectionId = CourseSectionRepository::resolveSectionId((int) ($_POST['section_id'] ?? 0), $classId);
-            $stmt = db()->prepare('UPDATE quizzes SET title=?, instructions=?, time_limit_minutes=?, due_date=?, max_attempts=?, section_id=? WHERE id=? AND class_id=? AND teacher_id=?');
-            $stmt->execute([$title, $instructions ?: null, $timeLimit, $dueDate ?: null, $maxAttempts, $sectionId, $quizId, $classId, $user['id']]);
-            flash('success', 'Quiz updated.');
-            redirect('teacher/course.php?id=' . $classId);
+            flash('success', 'Quiz created. Add your questions next.');
+            redirect(quizEditUrl($newId, $classId, 'questions'));
         } else {
-            $action = $quizId ? 'edit_quiz' : 'add_quiz';
-            if ($quizId) {
-                $itemId = $quizId;
-            }
+            $action = 'add_quiz';
         }
     } elseif ($postAction === 'delete_quiz') {
         $quizId = (int) ($_POST['quiz_id'] ?? 0);
@@ -228,8 +278,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $editMaterial = null;
 $editAssignment = null;
-$editQuiz = null;
 $editSection = null;
+
+$quizBuilderId = (int) ($_GET['quiz'] ?? 0);
+$quizStep = $_GET['step'] ?? 'questions';
+$quizEditQuestionId = (int) ($_GET['edit_q'] ?? 0);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postedQuizId = (int) ($_POST['quiz_id'] ?? 0);
+    if ($postedQuizId) {
+        $quizBuilderId = $postedQuizId;
+    }
+    $postedAction = $_POST['form_action'] ?? '';
+    if ($postedAction === 'save_settings') {
+        $quizStep = 'settings';
+    } elseif (in_array($postedAction, ['save_question', 'delete_question', 'reorder_question'], true)) {
+        $quizStep = 'questions';
+    }
+}
+
+$quizWizardCtx = null;
+if ($quizBuilderId) {
+    $action = '';
+    $quizWizardCtx = loadQuizWizardContext($quizBuilderId, $classId, (int) $user['id'], $quizStep, $quizEditQuestionId, $errors);
+    if (!$quizWizardCtx) {
+        flash('error', 'Quiz not found.');
+        redirect('teacher/course.php?id=' . $classId);
+    }
+}
 
 if ($action === 'edit_material' && $itemId) {
     $stmt = db()->prepare('SELECT * FROM materials WHERE id=? AND class_id=? AND teacher_id=?');
@@ -242,14 +317,6 @@ if ($action === 'edit_assignment' && $itemId) {
     $editAssignment = $stmt->fetch();
     if ($editAssignment && $editAssignment['due_date']) {
         $editAssignment['due_date_local'] = date('Y-m-d\TH:i', strtotime($editAssignment['due_date']));
-    }
-}
-if ($action === 'edit_quiz' && $itemId) {
-    $stmt = db()->prepare('SELECT * FROM quizzes WHERE id=? AND class_id=? AND teacher_id=?');
-    $stmt->execute([$itemId, $classId, $user['id']]);
-    $editQuiz = $stmt->fetch();
-    if ($editQuiz && $editQuiz['due_date']) {
-        $editQuiz['due_date_local'] = date('Y-m-d\TH:i', strtotime($editQuiz['due_date']));
     }
 }
 if ($action === 'edit_section' && $sectionIdParam) {
@@ -268,7 +335,7 @@ $quizCount = $courseContent['quiz_count'];
 $activityCount = $courseContent['activity_count'];
 $defaultFormSectionId = $sectionIdParam ?: ($sections[0]['id'] ?? null);
 $courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
-$formOpen = in_array($action, ['add_material', 'edit_material', 'add_assignment', 'edit_assignment', 'add_quiz', 'edit_quiz', 'add_section', 'edit_section'], true);
+$formOpen = !$quizWizardCtx && in_array($action, ['add_material', 'edit_material', 'add_assignment', 'edit_assignment', 'add_quiz', 'add_section', 'edit_section'], true);
 $formType = '';
 if (str_contains($action, 'material')) {
     $formType = 'material';
@@ -295,7 +362,7 @@ $breadcrumbs = [
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
-<div class="course-view">
+<div class="course-view<?= $quizWizardCtx ? ' course-view--quiz-builder' : '' ?>">
     <section class="course-hero<?= classHasCustomCover($class) ? ' course-hero--custom-cover' : '' ?>" style="background-image: url('<?= e($coverPreviewUrl) ?>')" data-preview-cover>
         <div class="course-hero-overlay" aria-hidden="true"></div>
         <button type="button" class="course-hero-settings-btn" id="openCourseSettings" aria-label="Class settings" title="Class settings">
@@ -344,6 +411,11 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
     </div>
 
     <div class="course-main course-main--full">
+            <?php if ($quizWizardCtx): ?>
+            <section class="course-content-section course-content-section--quiz-wizard">
+                <?php require __DIR__ . '/../includes/layout/quiz_wizard.php'; ?>
+            </section>
+            <?php else: ?>
             <?php if ($formOpen): ?>
             <section class="course-form-sheet course-form-sheet--<?= e($formType) ?>" id="courseFormPanel">
                 <div class="course-form-sheet-header">
@@ -359,7 +431,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                             <h2><?= $editSection ? 'Edit section' : 'New lesson section' ?></h2>
                         <?php else: ?>
                             <span class="course-form-sheet-badge quiz"><i class="fa-solid fa-circle-question"></i> Quiz</span>
-                            <h2><?= $editQuiz ? 'Edit quiz' : 'New quiz' ?></h2>
+                            <h2>New quiz</h2>
                         <?php endif; ?>
                     </div>
                     <a href="<?= e($courseUrl) ?>" class="course-form-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></a>
@@ -367,10 +439,19 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                 <?php foreach ($errors as $err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endforeach; ?>
 
                 <?php if ($action === 'add_material' || $editMaterial): ?>
-                <form method="post" enctype="multipart/form-data" class="course-form">
+                <?php $editMat = $editMaterial ? MaterialRepository::normalizeRow($editMaterial) : null; ?>
+                <form method="post" enctype="multipart/form-data" class="course-form" id="materialForm">
                     <?= csrfField() ?>
                     <input type="hidden" name="form_action" value="<?= $editMaterial ? 'edit_material' : 'add_material' ?>">
                     <?php if ($editMaterial): ?><input type="hidden" name="material_id" value="<?= (int) $editMaterial['id'] ?>"><?php endif; ?>
+                    <div class="form-group">
+                        <label>Material type</label>
+                        <select name="material_type" id="materialType" class="form-control" onchange="toggleMaterialFields()">
+                            <option value="file"<?= ($editMat['type'] ?? 'file') === 'file' ? ' selected' : '' ?>>File upload</option>
+                            <option value="link"<?= ($editMat['type'] ?? '') === 'link' ? ' selected' : '' ?>>External link</option>
+                            <option value="doc"<?= ($editMat['type'] ?? '') === 'doc' ? ' selected' : '' ?>>Rich document</option>
+                        </select>
+                    </div>
                     <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editMaterial['title'] ?? '') ?>" required placeholder="e.g. Week 1 lecture slides"></div>
                     <?php if (!empty($sections)): ?>
                     <div class="form-group">
@@ -380,22 +461,46 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                         </select>
                     </div>
                     <?php endif; ?>
-                    <div class="form-group"><label>Description</label><textarea name="body" class="form-control" rows="3" placeholder="Optional instructions for students"><?= e($editMaterial['body'] ?? '') ?></textarea></div>
-                    <div class="form-row">
-                        <div class="form-group"><label>External link</label><input type="url" name="external_link" class="form-control" value="<?= e($editMaterial['external_link'] ?? '') ?>" placeholder="https://"></div>
+                    <div class="form-group"><label>Description</label><textarea name="body" class="form-control" rows="2" placeholder="Optional note for students"><?= e($editMaterial['body'] ?? '') ?></textarea></div>
+                    <div id="materialFileFields">
                         <div class="form-group">
                             <label>Upload file</label>
                             <input type="file" name="file" class="form-control">
                             <?php if ($editMaterial && $editMaterial['file_path']): ?>
-                                <small class="text-muted">Current file: <a href="<?= e(uploadUrl($editMaterial['file_path'])) ?>" target="_blank">Download</a></small>
+                                <small class="text-muted">Current: <?= e($editMaterial['original_name'] ?? 'file') ?></small>
                             <?php endif; ?>
                         </div>
+                        <div class="form-group">
+                            <label>Student access</label>
+                            <select name="file_access_mode" class="form-control">
+                                <option value="downloadable"<?= ($editMat['file_access_mode'] ?? 'downloadable') === 'downloadable' ? ' selected' : '' ?>>Downloadable</option>
+                                <option value="view_only"<?= ($editMat['file_access_mode'] ?? '') === 'view_only' ? ' selected' : '' ?>>View only</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="materialLinkFields" style="display:none">
+                        <div class="form-group"><label>URL</label><input type="url" name="external_link" class="form-control" value="<?= e($editMat['content'] ?? $editMaterial['external_link'] ?? '') ?>" placeholder="https://"></div>
+                    </div>
+                    <div id="materialDocFields" style="display:none">
+                        <p class="text-muted">Save to open the rich document editor where you can write formatted content.</p>
+                        <?php if ($editMaterial && ($editMat['type'] ?? '') === 'doc'): ?>
+                            <a href="<?= url('teacher/material-editor.php?id=' . $editMaterial['id'] . '&class_id=' . $classId) ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-pen"></i> Edit document content</a>
+                        <?php endif; ?>
                     </div>
                     <div class="course-form-actions">
                         <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save material</button>
                         <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
                     </div>
                 </form>
+                <script>
+                function toggleMaterialFields() {
+                    var t = document.getElementById('materialType').value;
+                    document.getElementById('materialFileFields').style.display = t === 'file' ? 'block' : 'none';
+                    document.getElementById('materialLinkFields').style.display = t === 'link' ? 'block' : 'none';
+                    document.getElementById('materialDocFields').style.display = t === 'doc' ? 'block' : 'none';
+                }
+                toggleMaterialFields();
+                </script>
                 <?php endif; ?>
 
                 <?php if ($action === 'add_assignment' || $editAssignment): ?>
@@ -425,29 +530,23 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                 </form>
                 <?php endif; ?>
 
-                <?php if ($action === 'add_quiz' || $editQuiz): ?>
+                <?php if ($action === 'add_quiz'): ?>
                 <form method="post" class="course-form">
                     <?= csrfField() ?>
-                    <input type="hidden" name="form_action" value="<?= $editQuiz ? 'edit_quiz' : 'add_quiz' ?>">
-                    <?php if ($editQuiz): ?><input type="hidden" name="quiz_id" value="<?= (int) $editQuiz['id'] ?>"><?php endif; ?>
-                    <div class="form-group"><label>Title</label><input name="title" class="form-control" value="<?= e($editQuiz['title'] ?? '') ?>" required placeholder="e.g. Midterm quiz"></div>
+                    <input type="hidden" name="form_action" value="add_quiz">
+                    <input type="hidden" name="class_id" value="<?= (int) $classId ?>">
+                    <p class="course-form-intro text-muted">Start with a title. You will add questions and configure schedule, timer, and publishing on the next screens.</p>
+                    <div class="form-group"><label>Quiz title</label><input name="title" class="form-control" value="<?= e($_POST['title'] ?? '') ?>" required placeholder="e.g. Midterm quiz" autofocus></div>
                     <?php if (!empty($sections)): ?>
                     <div class="form-group">
                         <label>Lesson section</label>
                         <select name="section_id" class="form-control">
-                            <?= courseSectionOptions($sections, (int) ($editQuiz['section_id'] ?? $defaultFormSectionId ?: 0) ?: null) ?>
+                            <?= courseSectionOptions($sections, (int) ($defaultFormSectionId ?: 0) ?: null) ?>
                         </select>
                     </div>
                     <?php endif; ?>
-                    <div class="form-group"><label>Instructions</label><textarea name="instructions" class="form-control" rows="3"><?= e($editQuiz['instructions'] ?? '') ?></textarea></div>
-                    <div class="form-row">
-                        <div class="form-group"><label>Time limit (min)</label><input type="number" name="time_limit_minutes" class="form-control" value="<?= e($editQuiz['time_limit_minutes'] ?? '') ?>" placeholder="Optional"></div>
-                        <div class="form-group"><label>Due date</label><input type="datetime-local" name="due_date" class="form-control" value="<?= e($editQuiz['due_date_local'] ?? '') ?>"></div>
-                        <div class="form-group"><label>Max attempts</label><input type="number" name="max_attempts" class="form-control" value="<?= e($editQuiz['max_attempts'] ?? '1') ?>" min="1"></div>
-                    </div>
                     <div class="course-form-actions">
-                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> <?= $editQuiz ? 'Save quiz' : 'Create &amp; add questions' ?></button>
-                        <?php if ($editQuiz): ?><a href="<?= url('teacher/quiz-edit.php?id=' . $editQuiz['id'] . '&class_id=' . $classId) ?>" class="btn btn-secondary">Manage questions</a><?php endif; ?>
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-arrow-right"></i> Create &amp; add questions</button>
                         <a href="<?= e($courseUrl) ?>" class="btn btn-secondary">Cancel</a>
                     </div>
                 </form>
@@ -510,6 +609,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                 </div>
                 <?php endif; ?>
             </section>
+            <?php endif; ?>
     </div>
 </div>
 

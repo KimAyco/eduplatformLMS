@@ -31,13 +31,14 @@ function renderCourseLessonSections(array $content, int $classId, string $mode, 
             'description' => $hasSections ? 'Move these into a lesson using the section menu on each item.' : null,
             'activities' => $content['uncategorized'],
         ];
-        renderCourseLessonSection($fallback, $classId, $mode, $sections, 0, !$hasSections);
+        renderCourseLessonSection($fallback, $classId, $mode, $sections, 0, true);
     }
 
     $sectionIndex = 0;
     foreach ($content['sections'] as $section) {
         $sectionIndex++;
-        renderCourseLessonSection($section, $classId, $mode, $sections, $sectionIndex, $sectionIndex === 1);
+        $openDefault = $sectionIndex === 1 && empty($content['uncategorized']);
+        renderCourseLessonSection($section, $classId, $mode, $sections, $sectionIndex, $openDefault);
     }
 }
 
@@ -97,6 +98,30 @@ function renderCourseLessonSection(array $section, int $classId, string $mode, a
     <?php
 }
 
+function materialActivityChipsHtml(array $item, bool $forTeacher = false): string
+{
+    $item = MaterialRepository::normalizeRow($item);
+    $html = '<span class="activity-meta-chip muted">' . e(materialTypeLabel($item['type'])) . '</span>';
+    if ($item['type'] === 'file' && !empty($item['file_path'])) {
+        $viewUrl = materialViewUrl((int) $item['id']);
+        $html .= '<a href="' . e($viewUrl) . '" class="activity-meta-chip"><i class="fa-solid fa-eye"></i> View</a>';
+        if (($item['file_access_mode'] ?? 'downloadable') === 'downloadable') {
+            $dl = materialDownloadUrl($item) . '&download=1';
+            $html .= '<a href="' . e($dl) . '" class="activity-meta-chip" download><i class="fa-solid fa-download"></i> Download</a>';
+        }
+    } elseif ($item['type'] === 'link') {
+        $link = normalizeExternalUrl($item['content'] ?? $item['external_link'] ?? '');
+        $html .= '<a href="' . e(materialViewUrl((int) $item['id'])) . '" class="activity-meta-chip"><i class="fa-solid fa-link"></i> Open link</a>';
+    } elseif ($item['type'] === 'doc') {
+        $html .= '<a href="' . e(materialViewUrl((int) $item['id'])) . '" class="activity-meta-chip"><i class="fa-solid fa-book-open"></i> Read document</a>';
+        if ($forTeacher) {
+            $html .= '<a href="' . e(url('teacher/material-editor.php?id=' . $item['id'] . '&class_id=' . $item['class_id'])) . '" class="activity-meta-chip"><i class="fa-solid fa-pen"></i> Edit doc</a>';
+        }
+    }
+    $html .= '<span class="activity-meta-chip muted">' . formatDate($item['created_at'], 'M j, Y') . '</span>';
+    return $html;
+}
+
 function renderStudentCourseActivityCard(array $act, int $classId): void
 {
     $item = $act['item'];
@@ -109,8 +134,7 @@ function renderStudentCourseActivityCard(array $act, int $classId): void
             <?php if ($item['body']): ?><p><?= e($item['body']) ?></p><?php endif; ?>
             <div class="activity-card-meta">
                 <span class="activity-meta-chip muted"><i class="fa-solid fa-user"></i> <?= e($item['teacher_first'] . ' ' . $item['teacher_last']) ?></span>
-                <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" class="activity-meta-chip" download><i class="fa-solid fa-download"></i> Download</a><?php endif; ?>
-                <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank" class="activity-meta-chip"><i class="fa-solid fa-link"></i> Open link</a><?php endif; ?>
+                <?= materialActivityChipsHtml($item) ?>
             </div>
         </div>
     </article>
@@ -172,9 +196,7 @@ function renderTeacherCourseActivityCard(array $act, int $classId, array $sectio
             </div>
             <div class="activity-module-meta">
                 <?php if ($type === 'material'): ?>
-                    <?php if ($item['file_path']): ?><a href="<?= e(uploadUrl($item['file_path'])) ?>" class="activity-meta-chip" download><i class="fa-solid fa-download"></i> Download</a><?php endif; ?>
-                    <?php if ($item['external_link']): ?><a href="<?= e($item['external_link']) ?>" target="_blank" rel="noopener" class="activity-meta-chip"><i class="fa-solid fa-link"></i> Open link</a><?php endif; ?>
-                    <span class="activity-meta-chip muted"><?= formatDate($item['created_at'], 'M j, Y') ?></span>
+                    <?= materialActivityChipsHtml($item, true) ?>
                 <?php elseif ($type === 'assignment'): ?>
                     <span class="activity-meta-chip"><i class="fa-regular fa-calendar"></i> <?= formatDate($item['due_date'], 'M j, Y') ?></span>
                     <span class="activity-meta-chip"><?= e($item['max_points']) ?> pts</span>
@@ -201,14 +223,18 @@ function renderTeacherCourseActivityCard(array $act, int $classId, array $sectio
             <div class="activity-module-buttons">
                 <?php if ($type === 'material'): ?>
                     <a href="<?= teacherCourseUrl($classId, 'action=edit_material&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                    <?php if (($item['type'] ?? 'file') === 'doc'): ?>
+                    <a href="<?= url('teacher/material-editor.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-secondary" title="Edit document"><i class="fa-solid fa-file-lines"></i></a>
+                    <?php endif; ?>
                     <form method="post" data-confirm="Delete this material?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                 <?php elseif ($type === 'assignment'): ?>
                     <a href="<?= url('teacher/grade-submissions.php?assignment_id=' . $item['id']) ?>" class="btn btn-sm btn-primary">Grade</a>
                     <a href="<?= teacherCourseUrl($classId, 'action=edit_assignment&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
                     <form method="post" data-confirm="Delete this assignment?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_assignment"><input type="hidden" name="assignment_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                 <?php else: ?>
-                    <a href="<?= url('teacher/quiz-edit.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-primary">Questions</a>
-                    <a href="<?= teacherCourseUrl($classId, 'action=edit_quiz&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                    <a href="<?= url('teacher/quiz-attempts.php?quiz_id=' . (int) $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-primary">Attempts</a>
+                    <a href="<?= e(quizEditUrl((int) $item['id'], $classId, 'settings')) ?>" class="btn btn-sm btn-secondary" title="Quiz settings"><i class="fa-solid fa-gear"></i></a>
+                    <a href="<?= e(quizEditUrl((int) $item['id'], $classId, 'questions')) ?>" class="btn btn-sm btn-secondary">Questions</a>
                     <form method="post" data-confirm="Delete this quiz?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_quiz"><input type="hidden" name="quiz_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                 <?php endif; ?>
             </div>

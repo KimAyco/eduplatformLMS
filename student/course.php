@@ -112,6 +112,8 @@ $coverPreviewUrl = classCoverImageUrl($class);
 
             <?php endif; ?>
 
+            <a href="<?= url('student/grade-card.php?class_id=' . $classId) ?>" class="btn btn-secondary btn-sm course-grade-card-link"><i class="fa-solid fa-chart-simple"></i> Grade card</a>
+
         </div>
 
     </section>

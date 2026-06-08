@@ -1,6 +1,6 @@
 <?php
 
-function renderCourseCard(array $class, string $href, ?string $bodyHtml = null): void
+function renderCourseCard(array $class, string $href, ?string $bodyHtml = null, string $footerLabel = 'Open course'): void
 {
     $coverUrl = classCoverImageUrl($class);
     $hasCover = classHasCustomCover($class);
@@ -31,7 +31,7 @@ function renderCourseCard(array $class, string $href, ?string $bodyHtml = null):
             <?= $bodyHtml ?>
         </div>
         <div class="course-card-footer">
-            <span class="course-open-link">Open course <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+            <span class="course-open-link"><?= e($footerLabel) ?> <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
         </div>
     </a>
     <?php

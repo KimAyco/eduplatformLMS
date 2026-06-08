@@ -380,6 +380,11 @@ function clearClassCoverCaches(int $classId, int $schoolId): void
 
 function redirect(string $path): never
 {
+    if (preg_match('#^https?://#i', $path) || str_starts_with($path, '/')) {
+        header('Location: ' . $path);
+        exit;
+    }
+
     header('Location: ' . url($path));
     exit;
 }
@@ -638,4 +643,134 @@ function adminEmptyState(string $icon, string $title, string $text, ?string $cta
     </div>
     <?php
     return ob_get_clean();
+}
+
+function sanitizeHtml(?string $html): string
+{
+    if ($html === null || $html === '') {
+        return '';
+    }
+
+    $allowed = '<p><br><strong><b><em><i><u><ul><ol><li><h1><h2><h3><h4><h5><h6><blockquote><a><table><thead><tbody><tr><th><td><span><div><hr><sub><sup><code><pre><img>';
+    $clean = strip_tags($html, $allowed);
+
+    return preg_replace('/\s(on\w+|style|javascript:|data:)\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $clean) ?? $clean;
+}
+
+function materialTypeLabel(string $type): string
+{
+    return match (normalizeMaterialType($type)) {
+        'link' => 'Link',
+        'doc' => 'Document',
+        default => 'File',
+    };
+}
+
+function normalizeMaterialType(string $type): string
+{
+    $type = strtolower(trim($type));
+    return in_array($type, ['file', 'link', 'doc'], true) ? $type : 'file';
+}
+
+function normalizeExternalUrl(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+    if (!preg_match('#^https?://#i', $url)) {
+        $url = 'https://' . $url;
+    }
+    return $url;
+}
+
+function youtubeEmbedUrl(?string $url): ?string
+{
+    if (!$url) {
+        return null;
+    }
+    if (preg_match('#(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]{11})#i', $url, $m)) {
+        return 'https://www.youtube.com/embed/' . $m[1];
+    }
+    return null;
+}
+
+function uploadFileWithMeta(array $file, string $subdir): array
+{
+    $path = uploadFile($file, $subdir);
+    if ($path === null) {
+        return ['path' => null, 'original_name' => null, 'mime_type' => null, 'file_size' => 0];
+    }
+    $full = UPLOAD_DIR . '/' . ltrim($path, '/');
+    return [
+        'path' => $path,
+        'original_name' => $file['name'] ?? basename($path),
+        'mime_type' => is_file($full) ? (mime_content_type($full) ?: null) : null,
+        'file_size' => is_file($full) ? filesize($full) : 0,
+    ];
+}
+
+function materialViewUrl(int $materialId): string
+{
+    return url('material-view.php?id=' . $materialId);
+}
+
+function materialDownloadUrl(array $material, bool $inline = false): ?string
+{
+    if (empty($material['file_path'])) {
+        return null;
+    }
+    $base = downloadUrl($material['file_path'], 'material') . '&material_id=' . (int) $material['id'];
+    if ($inline || (($material['file_access_mode'] ?? 'downloadable') === 'view_only')) {
+        $base .= '&disposition=inline';
+    }
+    return $base;
+}
+
+function quizAttachmentUrl(?string $path): ?string
+{
+    if (!$path) {
+        return null;
+    }
+    return downloadUrl($path, 'quiz_attachment');
+}
+
+function uploadQuizCover(array $file, int $schoolId, int $quizId): ?string
+{
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+        throw new RuntimeException('Cover must be an image (JPG, PNG, GIF, or WebP).');
+    }
+    return uploadFile($file, $schoolId . '/quiz_covers');
+}
+
+function quizCoverServeUrl(?string $path): ?string
+{
+    if (!$path) {
+        return null;
+    }
+    return quizCoverImageUrl(['cover_image' => $path]);
+}
+
+function quizEditUrl(int $quizId, int $classId, string $step = 'questions', int $editQuestionId = 0): string
+{
+    $step = in_array($step, ['questions', 'settings'], true) ? $step : 'questions';
+    $query = 'teacher/course.php?id=' . $classId . '&quiz=' . $quizId . '&step=' . $step;
+    if ($editQuestionId > 0 && $step === 'questions') {
+        $query .= '&edit_q=' . $editQuestionId;
+    }
+    return url($query);
+}
+
+function quizCoverImageUrl(array $quiz): ?string
+{
+    $custom = trim((string) ($quiz['cover_image'] ?? ''));
+    if ($custom === '') {
+        return null;
+    }
+
+    return url('download.php?type=quiz_cover&file=' . rawurlencode(ltrim($custom, '/')));
 }

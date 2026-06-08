@@ -15,7 +15,7 @@ $quiz = $stmt->fetch();
 
 if (!$quiz) {
     flash('error', 'Quiz not found.');
-    redirect('student/quizzes.php');
+    redirect('student/classes.php');
 }
 
 $can = canStudentTakeQuiz($quiz, $user['id']);
@@ -26,19 +26,11 @@ $attempt = $attempt->fetch();
 
 if (!$attempt && !$can['ok']) {
     flash('error', $can['reason'] ?? 'Cannot take this quiz.');
-    redirect('student/quizzes.php');
+    redirect('student/course.php?id=' . (int) $quiz['class_id']);
 }
 
 if (!$attempt) {
-    db()->prepare('INSERT INTO quiz_attempts (quiz_id, student_id) VALUES (?, ?)')->execute([$quizId, $user['id']]);
-    $attemptId = (int) db()->lastInsertId();
-
-    $questions = db()->prepare('SELECT id FROM quiz_questions WHERE quiz_id = ? ORDER BY sort_order, id');
-    $questions->execute([$quizId]);
-    foreach ($questions->fetchAll() as $q) {
-        db()->prepare('INSERT INTO quiz_attempt_answers (attempt_id, question_id) VALUES (?, ?)')->execute([$attemptId, $q['id']]);
-    }
-
+    $attemptId = startQuizAttempt($quizId, (int) $user['id'], !empty($quiz['randomize_questions_order']));
     $attempt = db()->prepare('SELECT * FROM quiz_attempts WHERE id = ?');
     $attempt->execute([$attemptId]);
     $attempt = $attempt->fetch();
@@ -46,25 +38,58 @@ if (!$attempt) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
-    $action = $_POST['form_action'] ?? '';
-
-    if ($action === 'submit') {
-        $answers = db()->prepare('SELECT qaa.*, qq.type FROM quiz_attempt_answers qaa
+    if (($_POST['form_action'] ?? '') === 'submit') {
+        $answers = db()->prepare('SELECT qaa.id, qaa.question_id, qq.type FROM quiz_attempt_answers qaa
             INNER JOIN quiz_questions qq ON qq.id = qaa.question_id
             WHERE qaa.attempt_id = ?');
         $answers->execute([$attempt['id']]);
-        $answerRows = $answers->fetchAll();
 
-        foreach ($answerRows as $ans) {
-            $qid = $ans['question_id'];
-            if ($ans['type'] === 'short_answer') {
-                $text = trim($_POST['answer_' . $qid] ?? '');
-                db()->prepare('UPDATE quiz_attempt_answers SET answer_text=? WHERE attempt_id=? AND question_id=?')
-                    ->execute([$text, $attempt['id'], $qid]);
-            } else {
+        foreach ($answers->fetchAll() as $ans) {
+            $qid = (int) $ans['question_id'];
+            $type = normalizeQuestionType($ans['type']);
+
+            if ($type === 'multiple_choice' || $type === 'true_false') {
                 $optId = (int) ($_POST['answer_' . $qid] ?? 0);
-                db()->prepare('UPDATE quiz_attempt_answers SET selected_option_id=? WHERE attempt_id=? AND question_id=?')
+                db()->prepare('UPDATE quiz_attempt_answers SET selected_option_id=?, answer_text=NULL, response_payload=NULL WHERE attempt_id=? AND question_id=?')
                     ->execute([$optId ?: null, $attempt['id'], $qid]);
+            } elseif ($type === 'essay') {
+                $text = trim($_POST['answer_' . $qid] ?? '');
+                db()->prepare('UPDATE quiz_attempt_answers SET answer_text=?, selected_option_id=NULL WHERE attempt_id=? AND question_id=?')
+                    ->execute([$text, $attempt['id'], $qid]);
+            } elseif ($type === 'fill_blank') {
+                $qRow = db()->prepare('SELECT settings FROM quiz_questions WHERE id=?');
+                $qRow->execute([$qid]);
+                $settings = decodeQuestionSettings($qRow->fetchColumn() ?: null);
+                $n = count($settings['blanks'] ?? []);
+                $blanks = [];
+                for ($i = 0; $i < $n; $i++) {
+                    $blanks[$i] = trim($_POST['blank_' . $qid . '_' . $i] ?? '');
+                }
+                db()->prepare('UPDATE quiz_attempt_answers SET response_payload=?, answer_text=NULL, selected_option_id=NULL WHERE attempt_id=? AND question_id=?')
+                    ->execute([json_encode(['blanks' => $blanks]), $attempt['id'], $qid]);
+            } elseif ($type === 'matching') {
+                $qRow = db()->prepare('SELECT settings FROM quiz_questions WHERE id=?');
+                $qRow->execute([$qid]);
+                $settings = decodeQuestionSettings($qRow->fetchColumn() ?: null);
+                $n = count($settings['matching']['left'] ?? []);
+                $map = [];
+                for ($i = 0; $i < $n; $i++) {
+                    $map[$i] = $_POST['matching_' . $qid . '_' . $i] ?? '';
+                }
+                db()->prepare('UPDATE quiz_attempt_answers SET response_payload=?, answer_text=NULL, selected_option_id=NULL WHERE attempt_id=? AND question_id=?')
+                    ->execute([json_encode(['matching' => $map]), $attempt['id'], $qid]);
+            } elseif ($type === 'file_response') {
+                $fileKey = 'file_answer_' . $qid;
+                if (!empty($_FILES[$fileKey]['name'])) {
+                    try {
+                        $path = uploadFile($_FILES[$fileKey], schoolId() . '/quiz_submissions');
+                        db()->prepare('UPDATE quiz_attempt_answers SET student_attachment_path=?, answer_text=? WHERE attempt_id=? AND question_id=?')
+                            ->execute([$path, $_FILES[$fileKey]['name'] ?? 'upload', $attempt['id'], $qid]);
+                    } catch (RuntimeException $e) {
+                        flash('error', $e->getMessage());
+                        redirect('student/quiz-take.php?quiz_id=' . $quizId);
+                    }
+                }
             }
         }
 
@@ -75,27 +100,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$questions = QuizRepository::questionsWithOptions($quizId);
-
-foreach ($questions as &$q) {
-    $existing = db()->prepare('SELECT selected_option_id, answer_text FROM quiz_attempt_answers WHERE attempt_id = ? AND question_id = ?');
-    $existing->execute([$attempt['id'], $q['id']]);
-    $saved = $existing->fetch();
-    $q['selected_option_id'] = $saved['selected_option_id'] ?? null;
-    $q['answer_text'] = $saved['answer_text'] ?? '';
-}
-unset($q);
+$questions = QuizRepository::questionsForAttemptView((int) $attempt['id']);
 
 $timeLimitSec = $quiz['time_limit_minutes'] ? $quiz['time_limit_minutes'] * 60 : null;
 $elapsed = time() - strtotime($attempt['started_at']);
+$coverUrl = quizCoverServeUrl($quiz['cover_image'] ?? null);
 
 $pageTitle = $quiz['title'];
 $pageHeading = $quiz['title'];
-$activeMenu = 'quizzes';
+$activeMenu = 'classes';
 $menuItems = studentMenu();
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
+
+<?php if ($coverUrl): ?>
+<div class="quiz-take-cover" style="background-image:url('<?= e($coverUrl) ?>')"></div>
+<?php endif; ?>
 
 <?php if ($quiz['instructions']): ?>
 <div class="panel"><p><?= nl2br(e($quiz['instructions'])) ?></p></div>
@@ -105,28 +126,12 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 <div class="alert alert-warning" id="timer">Time remaining: <span id="timeLeft"></span></div>
 <?php endif; ?>
 
-<form method="post" id="quizForm">
+<form method="post" id="quizForm" enctype="multipart/form-data">
     <?= csrfField() ?>
     <input type="hidden" name="form_action" value="submit">
 
     <?php foreach ($questions as $i => $q): ?>
-    <div class="question-block">
-        <strong>Q<?= $i + 1 ?>. <?= e($q['question_text']) ?></strong>
-        <span class="badge badge-submitted"><?= e($q['points']) ?> pts</span>
-
-        <?php if ($q['type'] === 'mcq' || $q['type'] === 'true_false'): ?>
-            <?php foreach ($q['options'] as $opt): ?>
-            <div class="form-check">
-                <input type="radio" name="answer_<?= $q['id'] ?>" id="opt<?= $opt['id'] ?>" value="<?= $opt['id'] ?>" <?= (int)$q['selected_option_id'] === (int)$opt['id'] ? 'checked' : '' ?>>
-                <label for="opt<?= $opt['id'] ?>"><?= e($opt['option_text']) ?></label>
-            </div>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <div class="form-group mt-1">
-                <textarea name="answer_<?= $q['id'] ?>" class="form-control"><?= e($q['answer_text'] ?? '') ?></textarea>
-            </div>
-        <?php endif; ?>
-    </div>
+        <?php renderQuizTakeQuestion($q, $i); ?>
     <?php endforeach; ?>
 
     <?php if (empty($questions)): ?>
@@ -143,13 +148,8 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
     var el = document.getElementById('timeLeft');
     var form = document.getElementById('quizForm');
     function tick() {
-        if (remaining <= 0) {
-            el.textContent = '0:00';
-            form.submit();
-            return;
-        }
-        var m = Math.floor(remaining / 60);
-        var s = remaining % 60;
+        if (remaining <= 0) { el.textContent = '0:00'; form.submit(); return; }
+        var m = Math.floor(remaining / 60), s = remaining % 60;
         el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
         remaining--;
         setTimeout(tick, 1000);
@@ -158,5 +158,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 })();
 </script>
 <?php endif; ?>
+
+<script src="<?= url('assets/js/quiz-matching-take.js') ?>"></script>
 
 <?php require __DIR__ . '/../includes/layout/dashboard_footer.php'; ?>

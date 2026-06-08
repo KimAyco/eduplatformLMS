@@ -5,6 +5,7 @@ requireSchoolActive();
 
 $user = currentUser();
 $quizId = (int) ($_GET['quiz_id'] ?? 0);
+$classId = (int) ($_GET['class_id'] ?? 0);
 
 $stmt = db()->prepare('SELECT * FROM quizzes WHERE id = ? AND teacher_id = ?');
 $stmt->execute([$quizId, $user['id']]);
@@ -13,6 +14,10 @@ $quiz = $stmt->fetch();
 if (!$quiz) {
     flash('error', 'Quiz not found.');
     redirect('teacher/quizzes.php');
+}
+
+if ($classId <= 0 && !empty($quiz['class_id'])) {
+    $classId = (int) $quiz['class_id'];
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -34,27 +39,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         gradeQuizAttempt((int) $attemptId->fetchColumn());
         flash('success', 'Answer graded.');
     }
-    redirect('teacher/quiz-attempts.php?quiz_id=' . $quizId);
+    redirect('teacher/quiz-attempts.php?quiz_id=' . $quizId . ($classId ? '&class_id=' . $classId : ''));
 }
 
-$attempts = db()->prepare('SELECT qa.*, u.first_name, u.last_name, u.email
+$attemptsQuery = 'SELECT qa.*, u.first_name, u.last_name, u.email
     FROM quiz_attempts qa
     INNER JOIN users u ON u.id = qa.student_id
     WHERE qa.quiz_id = ? AND qa.status != ?
-    ORDER BY qa.submitted_at DESC');
+    ORDER BY qa.submitted_at DESC';
+$attempts = db()->prepare($attemptsQuery);
 $attempts->execute([$quizId, 'in_progress']);
 $attempts = $attempts->fetchAll();
+$maxScore = getQuizTotalPoints($quizId);
+$backUrl = $classId > 0 ? teacherCourseUrl($classId) : url('teacher/quizzes.php');
+$reviewBase = 'teacher/quiz-attempt-view.php?attempt_id=';
+$reviewClass = $classId > 0 ? '&class_id=' . $classId : '';
 
 $pageTitle = 'Quiz Attempts';
 $pageHeading = 'Attempts: ' . $quiz['title'];
-$activeMenu = 'quizzes';
+$activeMenu = $classId > 0 ? 'classes' : 'quizzes';
 $menuItems = teacherMenu();
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
 
 <div class="actions mb-1">
-    <a href="<?= url('teacher/quizzes.php') ?>" class="btn btn-secondary btn-sm">Back to Quizzes</a>
+    <a href="<?= e($backUrl) ?>" class="btn btn-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> <?= $classId > 0 ? 'Back to course' : 'Back to quizzes' ?></a>
+</div>
+
+<div class="panel quiz-attempts-summary">
+    <p class="mb-0">
+        <strong><?= count($attempts) ?></strong> completed attempt<?= count($attempts) !== 1 ? 's' : '' ?>
+        · Quiz total: <strong><?= e($maxScore) ?> pts</strong>
+    </p>
 </div>
 
 <div class="table-wrap">
@@ -62,14 +79,17 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <thead><tr><th>Student</th><th>Score</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
         <tbody>
         <?php if (empty($attempts)): ?>
-            <tr><td colspan="5" class="text-muted">No completed attempts.</td></tr>
+            <tr><td colspan="5" class="text-muted">No completed attempts yet.</td></tr>
         <?php else: foreach ($attempts as $a): ?>
             <tr>
-                <td><?= e($a['first_name'] . ' ' . $a['last_name']) ?></td>
-                <td><?= $a['score'] !== null ? e($a['score']) . ' / ' . getQuizTotalPoints($quizId) : '—' ?></td>
+                <td>
+                    <strong><?= e($a['first_name'] . ' ' . $a['last_name']) ?></strong>
+                    <div class="text-muted" style="font-size:0.8125rem"><?= e($a['email']) ?></div>
+                </td>
+                <td><?= $a['score'] !== null ? e($a['score']) . ' / ' . e($a['max_score'] ?? $maxScore) : '—' ?></td>
                 <td><span class="badge badge-<?= $a['status'] === 'graded' ? 'graded' : 'submitted' ?>"><?= e(ucfirst($a['status'])) ?></span></td>
                 <td><?= formatDate($a['submitted_at']) ?></td>
-                <td><a href="<?= url('teacher/quiz-attempt-view.php?attempt_id='.$a['id']) ?>" class="btn btn-sm btn-primary">Review</a></td>
+                <td><a href="<?= url($reviewBase . $a['id'] . $reviewClass) ?>" class="btn btn-sm btn-primary">Review</a></td>
             </tr>
         <?php endforeach; endif; ?>
         </tbody>

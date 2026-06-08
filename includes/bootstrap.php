@@ -7,8 +7,10 @@ require_once __DIR__ . '/security.php';
 initSecurity();
 
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/repositories/MaterialRepository.php';
 require_once __DIR__ . '/layout/course_card.php';
 require_once __DIR__ . '/layout/course_content.php';
+require_once __DIR__ . '/layout/quiz_take_render.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/cache.php';
 
@@ -36,7 +38,10 @@ function db(): PDO
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/user_profile.php';
 require_once __DIR__ . '/menus.php';
+require_once __DIR__ . '/quiz_scoring.php';
+require_once __DIR__ . '/quiz_question.php';
 require_once __DIR__ . '/quiz.php';
+require_once __DIR__ . '/quiz_wizard.php';
 require_once __DIR__ . '/superadmin_school.php';
 
 require_once __DIR__ . '/repositories/ClassGroupRepository.php';
@@ -46,3 +51,5 @@ require_once __DIR__ . '/repositories/CourseSectionRepository.php';
 require_once __DIR__ . '/repositories/QuizRepository.php';
 require_once __DIR__ . '/repositories/DashboardRepository.php';
 require_once __DIR__ . '/repositories/UserRepository.php';
+require_once __DIR__ . '/repositories/GradebookRepository.php';
+require_once __DIR__ . '/gradebook.php';

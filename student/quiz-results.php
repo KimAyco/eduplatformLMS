@@ -59,8 +59,12 @@ if ($attemptId) {
 
 if (!$attempt) {
     flash('error', 'Result not found.');
-    redirect('student/quizzes.php');
+    redirect('student/classes.php');
 }
+
+$quizRow = db()->prepare('SELECT show_score_to_students FROM quizzes WHERE id=?');
+$quizRow->execute([$attempt['quiz_id']]);
+$showScore = (int) ($quizRow->fetchColumn() ?: 1);
 
 $answers = QuizRepository::attemptAnswersWithDetails($attemptId);
 
@@ -75,7 +79,11 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 <div class="actions mb-1"><a href="<?= url('student/quizzes.php') ?>" class="btn btn-secondary btn-sm">Back to Quizzes</a></div>
 
 <div class="panel">
-    <p><strong>Score:</strong> <?= $attempt['score'] !== null ? e($attempt['score']) . ' / ' . getQuizTotalPoints($attempt['quiz_id']) : 'Pending grading' ?>
+    <?php if ($showScore): ?>
+    <p><strong>Score:</strong> <?= $attempt['score'] !== null ? e($attempt['score']) . ' / ' . e($attempt['max_score'] ?? getQuizTotalPoints($attempt['quiz_id'])) : 'Pending grading' ?>
+    <?php else: ?>
+    <p><strong>Score:</strong> <span class="text-muted">Your teacher has hidden scores for this quiz.</span>
+    <?php endif; ?>
     · <strong>Status:</strong> <?= e(ucfirst($attempt['status'])) ?>
     · <strong>Submitted:</strong> <?= formatDate($attempt['submitted_at']) ?></p>
 </div>

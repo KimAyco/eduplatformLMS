@@ -6,6 +6,9 @@ USE lms_saas;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+DROP TABLE IF EXISTS student_component_grades;
+DROP TABLE IF EXISTS class_grading_links;
+DROP TABLE IF EXISTS subject_grading_components;
 DROP TABLE IF EXISTS quiz_attempt_answers;
 DROP TABLE IF EXISTS quiz_attempts;
 DROP TABLE IF EXISTS quiz_options;
@@ -89,6 +92,22 @@ CREATE TABLE subjects (
     CONSTRAINT fk_subjects_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE subject_grading_components (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    subject_id INT UNSIGNED NOT NULL,
+    school_id INT UNSIGNED NOT NULL,
+    category VARCHAR(32) NOT NULL,
+    label VARCHAR(255) NOT NULL,
+    weight_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_sgc_subject (subject_id),
+    KEY idx_sgc_school (school_id),
+    CONSTRAINT fk_sgc_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_sgc_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE classes (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     school_id INT UNSIGNED NOT NULL,
@@ -153,9 +172,15 @@ CREATE TABLE materials (
     class_id INT UNSIGNED NOT NULL,
     section_id INT UNSIGNED DEFAULT NULL,
     teacher_id INT UNSIGNED NOT NULL,
+    type VARCHAR(16) NOT NULL DEFAULT 'file',
     title VARCHAR(255) NOT NULL,
+    content LONGTEXT DEFAULT NULL,
     body TEXT DEFAULT NULL,
     file_path VARCHAR(500) DEFAULT NULL,
+    original_name VARCHAR(255) DEFAULT NULL,
+    mime_type VARCHAR(120) DEFAULT NULL,
+    file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    file_access_mode ENUM('view_only', 'downloadable') NOT NULL DEFAULT 'downloadable',
     external_link VARCHAR(500) DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -211,6 +236,12 @@ CREATE TABLE quizzes (
     instructions TEXT DEFAULT NULL,
     time_limit_minutes INT UNSIGNED DEFAULT NULL,
     due_date DATETIME DEFAULT NULL,
+    opens_at DATETIME DEFAULT NULL,
+    closes_at DATETIME DEFAULT NULL,
+    is_published TINYINT(1) NOT NULL DEFAULT 1,
+    randomize_questions_order TINYINT(1) NOT NULL DEFAULT 0,
+    show_score_to_students TINYINT(1) NOT NULL DEFAULT 1,
+    cover_image VARCHAR(512) DEFAULT NULL,
     max_attempts INT UNSIGNED NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -225,10 +256,15 @@ CREATE TABLE quiz_questions (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     quiz_id INT UNSIGNED NOT NULL,
     question_text TEXT NOT NULL,
-    type ENUM('mcq', 'true_false', 'short_answer') NOT NULL,
+    type VARCHAR(32) NOT NULL DEFAULT 'multiple_choice',
     points DECIMAL(8,2) NOT NULL DEFAULT 1.00,
     sort_order INT UNSIGNED NOT NULL DEFAULT 0,
     correct_answer TEXT DEFAULT NULL,
+    settings JSON DEFAULT NULL,
+    teacher_attachment_path VARCHAR(512) DEFAULT NULL,
+    media_type VARCHAR(32) DEFAULT NULL,
+    media_path VARCHAR(512) DEFAULT NULL,
+    media_url VARCHAR(1024) DEFAULT NULL,
     KEY idx_questions_quiz (quiz_id),
     CONSTRAINT fk_questions_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -249,11 +285,15 @@ CREATE TABLE quiz_attempts (
     started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     submitted_at DATETIME DEFAULT NULL,
     score DECIMAL(8,2) DEFAULT NULL,
+    max_score DECIMAL(8,2) DEFAULT NULL,
     status ENUM('in_progress', 'submitted', 'graded') NOT NULL DEFAULT 'in_progress',
+    graded_by INT UNSIGNED DEFAULT NULL,
     KEY idx_attempts_quiz (quiz_id),
     KEY idx_attempts_student (student_id),
+    KEY idx_attempts_graded_by (graded_by),
     CONSTRAINT fk_attempts_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
-    CONSTRAINT fk_attempts_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+    CONSTRAINT fk_attempts_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_attempts_graded_by FOREIGN KEY (graded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE quiz_attempt_answers (
@@ -261,13 +301,58 @@ CREATE TABLE quiz_attempt_answers (
     attempt_id INT UNSIGNED NOT NULL,
     question_id INT UNSIGNED NOT NULL,
     answer_text TEXT DEFAULT NULL,
+    response_payload JSON DEFAULT NULL,
+    student_attachment_path VARCHAR(512) DEFAULT NULL,
     selected_option_id INT UNSIGNED DEFAULT NULL,
     is_correct TINYINT(1) DEFAULT NULL,
     points_earned DECIMAL(8,2) DEFAULT NULL,
+    teacher_feedback TEXT DEFAULT NULL,
     KEY idx_answers_attempt (attempt_id),
     KEY idx_answers_question (question_id),
     CONSTRAINT fk_answers_attempt FOREIGN KEY (attempt_id) REFERENCES quiz_attempts(id) ON DELETE CASCADE,
     CONSTRAINT fk_answers_question FOREIGN KEY (question_id) REFERENCES quiz_questions(id) ON DELETE CASCADE,
     CONSTRAINT fk_answers_option FOREIGN KEY (selected_option_id) REFERENCES quiz_options(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE class_grading_links (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    class_id INT UNSIGNED NOT NULL,
+    component_id INT UNSIGNED NOT NULL,
+    quiz_id INT UNSIGNED DEFAULT NULL,
+    assignment_id INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_class_component (class_id, component_id),
+    KEY idx_cgl_class (class_id),
+    KEY idx_cgl_component (component_id),
+    KEY idx_cgl_quiz (quiz_id),
+    KEY idx_cgl_assignment (assignment_id),
+    CONSTRAINT fk_cgl_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cgl_component FOREIGN KEY (component_id) REFERENCES subject_grading_components(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cgl_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE SET NULL,
+    CONSTRAINT fk_cgl_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE student_component_grades (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    class_id INT UNSIGNED NOT NULL,
+    student_id INT UNSIGNED NOT NULL,
+    component_id INT UNSIGNED NOT NULL,
+    score DECIMAL(8,2) DEFAULT NULL,
+    max_score DECIMAL(8,2) DEFAULT NULL,
+    percent DECIMAL(5,2) DEFAULT NULL,
+    source_quiz_attempt_id INT UNSIGNED DEFAULT NULL,
+    source_submission_id INT UNSIGNED DEFAULT NULL,
+    is_manual TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_scg_student_component (class_id, student_id, component_id),
+    KEY idx_scg_class (class_id),
+    KEY idx_scg_student (student_id),
+    KEY idx_scg_component (component_id),
+    CONSTRAINT fk_scg_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_scg_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_scg_component FOREIGN KEY (component_id) REFERENCES subject_grading_components(id) ON DELETE CASCADE,
+    CONSTRAINT fk_scg_quiz_attempt FOREIGN KEY (source_quiz_attempt_id) REFERENCES quiz_attempts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_scg_submission FOREIGN KEY (source_submission_id) REFERENCES assignment_submissions(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
