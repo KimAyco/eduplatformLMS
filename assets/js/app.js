@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initAlertAutoDismiss();
     initPageLoader();
     initConfirmForms();
+    initConfirmLogout();
     initPasswordToggles();
     initSchoolCodeSuggestion();
     initSchoolSearch();
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initCoursePage();
     initClickableTableRows();
     initImageUploadPreviews();
+    initMessengerUnreadPoll();
 });
 
 function initDrawer() {
@@ -173,6 +175,20 @@ function initConfirmForms() {
             showConfirm(msg, function () {
                 form.removeAttribute('data-confirm');
                 form.submit();
+            });
+        });
+    });
+}
+
+function initConfirmLogout() {
+    document.querySelectorAll('[data-confirm-logout]').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            var href = link.getAttribute('href');
+            if (!href) return;
+            var msg = link.getAttribute('data-confirm-logout') || 'Are you sure you want to log out?';
+            showConfirm(msg, function () {
+                window.location.href = href;
             });
         });
     });
@@ -629,7 +645,7 @@ function initClickableTableRows() {
 }
 
 function isTableRowInteractiveTarget(target, row) {
-    var interactive = target.closest('a, button, input, select, textarea, label, .actions');
+    var interactive = target.closest('a, button, input, select, textarea, label, .actions, .table-row-actions');
     return interactive && row.contains(interactive);
 }
 
@@ -637,7 +653,7 @@ function initImageUploadPreviews() {
     document.querySelectorAll('input[data-preview-input]').forEach(function (input) {
         input.addEventListener('change', function () {
             var file = input.files && input.files[0];
-            var panel = input.closest('.panel, .panel-nested, .user-profile-photo-panel, .course-settings-modal, .course-settings-section') || document.body;
+            var panel = input.closest('.panel, .panel-nested, .user-profile-photo-panel, .profile-photo-card, .course-settings-modal, .course-settings-section') || document.body;
             var form = input.closest('[data-upload-preview]') || panel;
             var note = form.querySelector('[data-preview-note]');
 
@@ -678,7 +694,7 @@ function initImageUploadPreviews() {
                 }
 
                 if (type === 'avatar') {
-                    var avatarTargets = scope === 'school-brand'
+                    var avatarTargets = (scope === 'school-brand' || scope === 'profile')
                         ? document.querySelectorAll('[data-preview-avatar]')
                         : panel.querySelectorAll('[data-preview-avatar]');
 
@@ -714,4 +730,37 @@ function applyAvatarPreview(container, url) {
         el.appendChild(img);
     }
     img.src = url;
+}
+
+function initMessengerUnreadPoll() {
+    var badges = document.querySelectorAll('[data-messenger-unread]');
+    if (!badges.length) return;
+
+    var apiMeta = document.querySelector('meta[name="messenger-api"]');
+    var apiUrl = apiMeta ? apiMeta.getAttribute('content') : '';
+    if (!apiUrl) return;
+
+    function refreshUnread() {
+        fetch(apiUrl + '?action=unread_count', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (!data.ok) return;
+                var count = data.unread_count || 0;
+                badges.forEach(function (el) {
+                    if (count > 0) {
+                        el.textContent = count > 99 ? '99+' : String(count);
+                        el.hidden = false;
+                    } else {
+                        el.hidden = true;
+                    }
+                });
+            })
+            .catch(function () { /* ignore */ });
+    }
+
+    refreshUnread();
+    window.setInterval(refreshUnread, 30000);
 }

@@ -1,0 +1,3 @@
+ALTER TABLE messages
+    ADD COLUMN edited_at DATETIME NULL DEFAULT NULL AFTER created_at,
+    ADD COLUMN deleted_at DATETIME NULL DEFAULT NULL AFTER edited_at;

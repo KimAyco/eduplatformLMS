@@ -5,6 +5,9 @@ requireSuperAdmin();
 $schoolId = (int) ($_GET['id'] ?? 0);
 processSchoolStatusAction('superadmin/school-view.php?id=' . $schoolId);
 
+require_once __DIR__ . '/../includes/storage.php';
+$schoolStorage = schoolStorageUsage($schoolId);
+
 $stmt = db()->prepare('SELECT s.*, u.email AS admin_email, u.first_name AS admin_first, u.last_name AS admin_last, u.id AS admin_id
     FROM schools s
     LEFT JOIN users u ON u.school_id = s.id AND u.role = ?
@@ -43,6 +46,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
     <div class="stat-card"><div class="value"><?= (int)$stats['teachers'] ?></div><div class="label">Teachers</div></div>
     <div class="stat-card"><div class="value"><?= (int)$stats['students'] ?></div><div class="label">Students</div></div>
     <div class="stat-card"><div class="value"><?= (int)$stats['classes'] ?></div><div class="label">Classes</div></div>
+    <div class="stat-card"><div class="value"><?= e(formatStorageSize($schoolStorage['total_bytes'])) ?></div><div class="label">Storage used</div></div>
 </div>
 
 <div class="panel">

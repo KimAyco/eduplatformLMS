@@ -138,18 +138,39 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 <?php else: ?>
 <div class="admin-table-card">
 <div class="table-wrap">
-    <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+    <table class="admin-data-table admin-data-table--people">
+        <thead>
+            <tr>
+                <th class="col-name">Name</th>
+                <th class="col-email">Email</th>
+                <th class="col-tags">Subjects</th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
+            </tr>
+        </thead>
         <tbody>
         <?php foreach ($students as $s): ?>
             <tr class="table-row-link" data-href="<?= e(url('school/student.php?id=' . $s['id'])) ?>" tabindex="0">
-                <td><?= tableUserCell($s['first_name'], $s['last_name'], $s) ?></td>
-                <td><?= e($s['email']) ?></td>
-                <td><span class="badge badge-<?= $s['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($s['status'])) ?></span></td>
+                <td class="col-name"><?= tableUserCell($s['first_name'], $s['last_name'], $s) ?></td>
+                <td class="col-email" title="<?= e($s['email']) ?>"><?= e($s['email']) ?></td>
+                <td class="col-status"><span class="badge badge-<?= $s['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($s['status'])) ?></span></td>
                 <td class="actions">
-                    <a href="<?= url('school/students.php?action=edit&id=' . $s['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
-                    <form method="post" style="display:inline"><?= csrfField() ?><input type="hidden" name="form_action" value="toggle"><input type="hidden" name="user_id" value="<?= $s['id'] ?>"><button class="btn btn-sm btn-secondary"><?= $s['status'] === 'active' ? 'Deactivate' : 'Activate' ?></button></form>
-                    <form method="post" style="display:inline" data-confirm="Delete this student?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete"><input type="hidden" name="user_id" value="<?= $s['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
+                    <div class="table-row-actions">
+                        <a href="<?= url('school/students.php?action=edit&id=' . $s['id']) ?>" class="table-action-btn" title="Edit" aria-label="Edit <?= e($s['first_name'] . ' ' . $s['last_name']) ?>"><i class="fa-solid fa-pen"></i></a>
+                        <form method="post">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="form_action" value="toggle">
+                            <input type="hidden" name="user_id" value="<?= (int) $s['id'] ?>">
+                            <button type="submit" class="table-action-btn" title="<?= $s['status'] === 'active' ? 'Deactivate' : 'Activate' ?>" aria-label="<?= $s['status'] === 'active' ? 'Deactivate' : 'Activate' ?> <?= e($s['first_name']) ?>">
+                                <i class="fa-solid <?= $s['status'] === 'active' ? 'fa-user-slash' : 'fa-user-check' ?>"></i>
+                            </button>
+                        </form>
+                        <form method="post" data-confirm="Delete this student?">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="form_action" value="delete">
+                            <input type="hidden" name="user_id" value="<?= (int) $s['id'] ?>">
+                            <button type="submit" class="table-action-btn table-action-btn--danger" title="Delete" aria-label="Delete <?= e($s['first_name']) ?>"><i class="fa-solid fa-trash"></i></button>
+                        </form>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>

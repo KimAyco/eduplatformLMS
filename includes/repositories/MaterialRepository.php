@@ -74,12 +74,14 @@ class MaterialRepository
         }
 
         $stmt = db()->prepare('INSERT INTO materials
-            (class_id, section_id, teacher_id, type, title, content, body, file_path, original_name, mime_type, file_size, file_access_mode, external_link)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            (class_id, section_id, teacher_id, library_resource_id, content_resource_id, type, title, content, body, file_path, original_name, mime_type, file_size, file_access_mode, external_link)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $classId,
             $sectionId,
             $teacherId,
+            !empty($data['library_resource_id']) ? (int) $data['library_resource_id'] : null,
+            !empty($data['content_resource_id']) ? (int) $data['content_resource_id'] : null,
             $type,
             $title,
             $data['content'] ?? null,
@@ -142,7 +144,9 @@ class MaterialRepository
         }
 
         if (!empty($existing['file_path'])) {
-            deleteUpload($existing['file_path']);
+            if (!self::shouldKeepUpload($existing['file_path'], (int) $existing['id'])) {
+                deleteUpload($existing['file_path']);
+            }
         }
 
         db()->prepare('DELETE FROM materials WHERE id = ?')->execute([$materialId]);
@@ -172,7 +176,8 @@ class MaterialRepository
             if (!empty($row['external_link']) && empty($row['file_path'])) {
                 $type = 'link';
             } elseif (!empty($row['content']) && empty($row['file_path']) && empty($row['external_link'])) {
-                $type = 'doc';
+                $decoded = json_decode((string) $row['content'], true);
+                $type = is_array($decoded) && isset($decoded['slides']) ? 'deck' : 'doc';
             }
         }
 
@@ -191,5 +196,18 @@ class MaterialRepository
         }
 
         return $row;
+    }
+
+    private static function shouldKeepUpload(string $filePath, int $materialId): bool
+    {
+        $stmt = db()->prepare('SELECT COUNT(*) FROM library_resources WHERE file_path = ?');
+        $stmt->execute([$filePath]);
+        if ((int) $stmt->fetchColumn() > 0) {
+            return true;
+        }
+
+        $stmt = db()->prepare('SELECT COUNT(*) FROM materials WHERE file_path = ? AND id != ?');
+        $stmt->execute([$filePath, $materialId]);
+        return (int) $stmt->fetchColumn() > 0;
     }
 }

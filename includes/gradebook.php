@@ -46,12 +46,16 @@ function resolveQuizGradeForStudent(int $quizId, int $studentId): ?array
 
 function syncQuizAttemptToGradebook(int $attemptId): void
 {
-    $stmt = db()->prepare('SELECT qa.*, q.class_id FROM quiz_attempts qa
+    $stmt = db()->prepare('SELECT qa.*, q.class_id, q.quiz_mode, q.counts_toward_gradebook FROM quiz_attempts qa
         INNER JOIN quizzes q ON q.id = qa.quiz_id
         WHERE qa.id = ?');
     $stmt->execute([$attemptId]);
     $attempt = $stmt->fetch();
     if (!$attempt || $attempt['status'] !== 'graded' || $attempt['score'] === null) {
+        return;
+    }
+
+    if (($attempt['quiz_mode'] ?? 'exam') === 'practice' || (int) ($attempt['counts_toward_gradebook'] ?? 1) === 0) {
         return;
     }
 

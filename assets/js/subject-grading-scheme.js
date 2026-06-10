@@ -5,6 +5,7 @@
     if (!wrap) return;
 
     var totalEl = document.getElementById('gradingWeightTotal');
+    var badgeEl = document.getElementById('gradingWeightBadge');
     var barEl = document.getElementById('gradingWeightBar');
     var categories = JSON.parse(wrap.getAttribute('data-categories') || '{}');
     var categoryIcons = {
@@ -47,10 +48,19 @@
             }
         });
 
+        var isInvalid = Math.abs(sum - 100) > 0.01 && wrap.children.length > 0;
+        var isValid = Math.abs(sum - 100) <= 0.01 && wrap.children.length > 0;
+
         if (totalEl) {
             totalEl.textContent = sum.toFixed(2);
-            totalEl.classList.toggle('is-invalid', Math.abs(sum - 100) > 0.01 && wrap.children.length > 0);
-            totalEl.classList.toggle('is-valid', Math.abs(sum - 100) <= 0.01 && wrap.children.length > 0);
+            totalEl.classList.toggle('is-invalid', isInvalid);
+            totalEl.classList.toggle('is-valid', isValid);
+        }
+
+        if (badgeEl) {
+            badgeEl.classList.toggle('is-invalid', isInvalid);
+            badgeEl.classList.toggle('is-valid', isValid);
+            badgeEl.classList.toggle('is-empty', wrap.children.length === 0);
         }
 
         if (barEl) {

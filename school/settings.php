@@ -4,7 +4,12 @@ requireRole('school_admin');
 requireSchoolActive();
 
 $schoolId = schoolId();
-$stmt = db()->prepare('SELECT id, name, cover_image, logo_image FROM schools WHERE id = ?');
+$hasPracticeCol = schoolHasPracticeSettingColumn();
+$selectCols = 'id, name, cover_image, logo_image';
+if ($hasPracticeCol) {
+    $selectCols .= ', practice_quizzes_enabled';
+}
+$stmt = db()->prepare('SELECT ' . $selectCols . ' FROM schools WHERE id = ?');
 $stmt->execute([$schoolId]);
 $school = $stmt->fetch();
 
@@ -56,6 +61,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'save_practice_setting' && $hasPracticeCol) {
+        $password = (string) ($_POST['admin_password'] ?? '');
+        if (!verifyCurrentUserPassword($password)) {
+            $errors[] = 'Incorrect password. Practice setting was not changed.';
+        } else {
+            $enabled = !empty($_POST['practice_quizzes_enabled']) ? 1 : 0;
+            db()->prepare('UPDATE schools SET practice_quizzes_enabled = ? WHERE id = ?')->execute([$enabled, $schoolId]);
+            flash('success', $enabled ? 'Practice quizzes enabled for students.' : 'Practice quizzes disabled for students.');
+            redirect('school/settings.php');
+        }
+    }
+
     if ($action === 'upload_logo') {
         try {
             $newPath = uploadSchoolLogo($_FILES['logo'] ?? [], $schoolId);
@@ -77,9 +94,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $pageTitle = 'Settings';
 $pageHeading = 'Settings';
-$pageSubtitle = 'Customize how your school appears on the public landing page.';
+$pageSubtitle = 'School branding and learning features.';
 $activeMenu = 'settings';
 $menuItems = schoolAdminMenu();
+$pageScripts = $hasPracticeCol ? ['assets/js/school-settings-practice.js'] : [];
+$practiceEnabled = !empty($school['practice_quizzes_enabled']);
 $breadcrumbs = [
     ['label' => 'Dashboard', 'url' => 'school/dashboard.php'],
     ['label' => 'Settings'],
@@ -159,6 +178,92 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
         <input type="hidden" name="action" value="remove_logo">
         <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-trash"></i> Remove custom logo</button>
     </form>
+    <?php endif; ?>
+</div>
+
+<div class="panel practice-setting-panel">
+    <?php if ($hasPracticeCol): ?>
+    <form method="post" id="practiceSettingForm" data-practice-enabled="<?= $practiceEnabled ? '1' : '0' ?>">
+        <?= csrfField() ?>
+        <input type="hidden" name="action" value="save_practice_setting">
+        <input type="hidden" name="practice_quizzes_enabled" id="practiceEnabledValue" value="<?= $practiceEnabled ? '1' : '0' ?>">
+        <input type="hidden" name="admin_password" id="practiceAdminPasswordHidden" value="">
+
+        <div class="practice-setting-card<?= $practiceEnabled ? ' is-enabled' : ' is-disabled' ?>" id="practiceSettingCard">
+            <div class="practice-setting-card__body">
+                <div class="practice-setting-card__icon" aria-hidden="true">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+
+                <div class="practice-setting-card__content">
+                    <div class="practice-setting-card__head">
+                        <div>
+                            <h2 class="practice-setting-card__title">Practice quizzes</h2>
+                            <p class="practice-setting-card__subtitle">AI-generated self-study quizzes from lesson materials. Scores never affect grades.</p>
+                        </div>
+                        <span class="practice-setting-status" id="practiceStatusBadge" data-state="<?= $practiceEnabled ? 'on' : 'off' ?>">
+                            <?= $practiceEnabled ? 'Enabled' : 'Disabled' ?>
+                        </span>
+                    </div>
+
+                    <ul class="practice-setting-features">
+                        <li><i class="fa-solid fa-check"></i> Per-lesson and full-course practice</li>
+                        <li><i class="fa-solid fa-check"></i> Student proficiency tracking</li>
+                        <li class="practice-setting-features__off"><i class="fa-solid fa-eye-slash"></i> When off: menu, buttons, and API access are hidden</li>
+                    </ul>
+                </div>
+
+                <div class="practice-setting-card__control">
+                    <span class="practice-setting-switch-label" id="practiceSwitchLabel"><?= $practiceEnabled ? 'On' : 'Off' ?></span>
+                    <label class="toggle-switch toggle-switch--lg" title="Toggle practice quizzes for students">
+                        <input type="checkbox" id="practiceSwitch" role="switch" aria-label="Enable practice quizzes for students" aria-checked="<?= $practiceEnabled ? 'true' : 'false' ?>"<?= $practiceEnabled ? ' checked' : '' ?>>
+                        <span class="toggle-switch__track" aria-hidden="true"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="practice-setting-card__footer">
+                <i class="fa-solid fa-lock"></i>
+                <span>Your password is required to change this setting</span>
+            </div>
+        </div>
+
+        <?php if (!aiIsEnabled()): ?>
+        <div class="practice-setting-notice">
+            <i class="fa-solid fa-circle-info"></i>
+            <div>
+                <strong>Platform AI is off</strong>
+                <p>Practice quizzes stay unavailable until the platform administrator enables AI.</p>
+            </div>
+        </div>
+        <?php endif; ?>
+    </form>
+
+    <dialog class="practice-password-dialog" id="practicePasswordDialog">
+        <form id="practicePasswordForm" class="practice-password-form">
+            <div class="practice-password-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></div>
+            <header class="practice-password-header">
+                <h3>Confirm your password</h3>
+                <button type="button" class="practice-password-close" data-close-practice-password aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <p class="practice-password-message" id="practicePasswordMessage"></p>
+            <div class="form-group">
+                <label for="practiceAdminPassword">School admin password</label>
+                <input type="password" id="practiceAdminPassword" class="form-control" placeholder="Enter your password" autocomplete="current-password" required>
+            </div>
+            <footer class="practice-password-footer">
+                <button type="button" class="btn btn-secondary" data-close-practice-password>Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Confirm change</button>
+            </footer>
+        </form>
+    </dialog>
+    <?php else: ?>
+    <div class="stu-alert stu-alert--info">
+        <i class="fa-solid fa-circle-info"></i>
+        <div>Practice quiz settings require a database update. Run <code>php scripts/run_migrations.php</code> to enable this option.</div>
+    </div>
     <?php endif; ?>
 </div>
 

@@ -4,6 +4,10 @@ requireSuperAdmin();
 
 processSchoolStatusAction('superadmin/dashboard.php');
 
+require_once __DIR__ . '/../includes/storage.php';
+$storageReport = platformStorageReport();
+$storageTopSchool = $storageReport['schools'][0] ?? null;
+
 $pageTitle = 'Dashboard';
 $pageHeading = 'Platform overview';
 $pageSubtitle = 'Monitor registrations, approvals, and school status across the platform.';
@@ -74,6 +78,26 @@ require __DIR__ . '/../includes/layout/dashboard_welcome.php';
                 </div>
             </div>
         </a>
+    </div>
+
+    <div class="panel superadmin-panel">
+        <div class="panel-header">
+            <div>
+                <h2><i class="fa-solid fa-hard-drive"></i> Storage overview</h2>
+                <p class="superadmin-panel-sub">
+                    <?= e(formatStorageSize($storageReport['total_bytes'])) ?> total · <?= number_format($storageReport['total_files']) ?> files across all schools
+                </p>
+            </div>
+            <a href="<?= url('superadmin/storage.php') ?>" class="btn btn-secondary btn-sm">View storage</a>
+        </div>
+        <?php if ($storageTopSchool && $storageTopSchool['total_bytes'] > 0): ?>
+            <p class="superadmin-panel-sub mb-1">
+                Highest usage: <a href="<?= url('superadmin/school-view.php?id=' . $storageTopSchool['id']) ?>"><?= e($storageTopSchool['name']) ?></a>
+                (<?= e(formatStorageSize($storageTopSchool['total_bytes'])) ?>)
+            </p>
+        <?php else: ?>
+            <p class="text-muted">No uploaded files yet.</p>
+        <?php endif; ?>
     </div>
 
     <?php if ((int) $stats['pending'] > 0): ?>

@@ -74,6 +74,16 @@ function teacherCourseUrl(int $classId, string $query = ''): string
     return url($url);
 }
 
+function teacherClassStudentsUrl(int $classId): string
+{
+    return url('teacher/class-students.php?class_id=' . $classId);
+}
+
+function teacherClassStudentUrl(int $classId, int $studentId): string
+{
+    return url('teacher/class-students.php?class_id=' . $classId . '&student_id=' . $studentId);
+}
+
 function studentCourseUrl(int $classId): string
 {
     return url('student/course.php?id=' . $classId);
@@ -662,6 +672,7 @@ function materialTypeLabel(string $type): string
     return match (normalizeMaterialType($type)) {
         'link' => 'Link',
         'doc' => 'Document',
+        'deck' => 'Slide deck',
         default => 'File',
     };
 }
@@ -669,7 +680,7 @@ function materialTypeLabel(string $type): string
 function normalizeMaterialType(string $type): string
 {
     $type = strtolower(trim($type));
-    return in_array($type, ['file', 'link', 'doc'], true) ? $type : 'file';
+    return in_array($type, ['file', 'link', 'doc', 'deck'], true) ? $type : 'file';
 }
 
 function normalizeExternalUrl(string $url): string

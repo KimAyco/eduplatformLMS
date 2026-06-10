@@ -7,7 +7,7 @@ function currentUser(): ?array
     }
 
     return remember('current_user_' . $_SESSION['user_id'], function () {
-        $stmt = db()->prepare('SELECT u.*, s.status AS school_status, s.name AS school_name
+        $stmt = db()->prepare('SELECT u.*, s.status AS school_status, s.name AS school_name, s.logo_image AS school_logo_image
             FROM users u
             LEFT JOIN schools s ON s.id = u.school_id
             WHERE u.id = ? AND u.status = ?');
@@ -42,6 +42,16 @@ function loginUser(array $user, ?string $schoolStatus = null): void
     $_SESSION['role'] = $user['role'];
     $_SESSION['school_id'] = $user['school_id'];
     $_SESSION['school_status'] = $schoolStatus ?? ($user['school_status'] ?? null);
+}
+
+function verifyCurrentUserPassword(string $password): bool
+{
+    $user = currentUser();
+    if (!$user || $password === '') {
+        return false;
+    }
+    $hash = (string) ($user['password_hash'] ?? '');
+    return $hash !== '' && password_verify($password, $hash);
 }
 
 function logoutUser(): void
@@ -136,7 +146,7 @@ function authenticate(string $email, string $password, ?string $roleFilter = nul
 {
     $dummyHash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
 
-    $sql = 'SELECT u.*, s.status AS school_status, s.name AS school_name FROM users u
+    $sql = 'SELECT u.*, s.status AS school_status, s.name AS school_name, s.logo_image AS school_logo_image FROM users u
             LEFT JOIN schools s ON s.id = u.school_id
             WHERE u.email = ? AND u.status = ?';
     $params = [$email, 'active'];

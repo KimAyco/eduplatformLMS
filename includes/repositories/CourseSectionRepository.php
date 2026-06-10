@@ -117,9 +117,11 @@ class CourseSectionRepository
         $quizCount = 0;
 
         if ($studentId) {
-            $stmt = db()->prepare('SELECT m.*, u.first_name AS teacher_first, u.last_name AS teacher_last
+            $stmt = db()->prepare('SELECT m.*, u.first_name AS teacher_first, u.last_name AS teacher_last,
+                lr.status AS library_status, lr.rejection_note AS library_rejection_note
                 FROM materials m
                 INNER JOIN users u ON u.id = m.teacher_id
+                LEFT JOIN library_resources lr ON lr.id = m.library_resource_id
                 WHERE m.class_id = ?
                 ORDER BY m.created_at ASC');
             $stmt->execute([$classId]);
@@ -145,7 +147,10 @@ class CourseSectionRepository
                 $params[] = $teacherId;
             }
 
-            $stmt = db()->prepare('SELECT * FROM materials WHERE class_id = ?' . $teacherFilter . ' ORDER BY created_at ASC');
+            $stmt = db()->prepare('SELECT m.*, lr.status AS library_status, lr.rejection_note AS library_rejection_note
+                FROM materials m
+                LEFT JOIN library_resources lr ON lr.id = m.library_resource_id
+                WHERE m.class_id = ?' . $teacherFilter . ' ORDER BY m.created_at ASC');
             $stmt->execute($params);
             $materials = $stmt->fetchAll();
 

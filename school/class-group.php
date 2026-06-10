@@ -27,6 +27,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('school/class-group.php?id=' . $groupId . '&tab=subjects');
     }
 
+    if ($action === 'apply_curriculum') {
+        if (empty($group['program_level_id'])) {
+            flash('error', 'This group is not linked to a program level.');
+        } else {
+            $added = ProgramRepository::applyCurriculumForLevel($groupId, (int) $group['program_level_id'], $sid);
+            flash('success', 'Added ' . $added . ' missing curriculum subject(s).');
+        }
+        redirect('school/class-group.php?id=' . $groupId . '&tab=subjects');
+    }
+
     if ($action === 'remove_subject') {
         $classId = (int) ($_POST['class_id'] ?? 0);
         if (ClassGroupRepository::removeOffering($classId, $groupId, $sid)) {
@@ -108,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $offerings = ClassGroupRepository::offerings($groupId, $sid);
 $availableSubjects = SubjectRepository::notInGroup($sid, $groupId);
+$missingCurriculum = ProgramRepository::missingSubjectsForGroup($groupId, $sid);
 $enrolledStudents = ClassGroupRepository::enrolledStudents($groupId);
 $availableStudents = ClassGroupRepository::availableStudents($groupId, $sid);
 
@@ -139,6 +150,9 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <?php if ($group['description']): ?>
                 <p class="text-muted"><?= e($group['description']) ?></p>
             <?php endif; ?>
+            <?php if (!empty($group['program_name'])): ?>
+                <p class="text-muted"><i class="fa-solid fa-sitemap"></i> <?= e($group['program_name']) ?><?= !empty($group['level_name']) ? ' · ' . e($group['level_name']) : '' ?></p>
+            <?php endif; ?>
         </div>
         <div class="actions">
             <a href="<?= url('school/class-groups.php?action=edit&id=' . $groupId) ?>" class="btn btn-secondary btn-sm">Edit group</a>
@@ -160,6 +174,17 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 <div class="panel">
     <h3>Subjects in this group</h3>
     <p class="text-muted mb-1">Add subjects from your catalog, then assign one teacher per subject.</p>
+
+    <?php if (!empty($missingCurriculum)): ?>
+    <div class="alert alert-warning program-curriculum-alert">
+        <?= count($missingCurriculum) ?> curriculum subject(s) are not in this group yet.
+        <form method="post" style="display:inline">
+            <?= csrfField() ?>
+            <input type="hidden" name="form_action" value="apply_curriculum">
+            <button type="submit" class="btn btn-sm btn-primary">Add missing curriculum subjects</button>
+        </form>
+    </div>
+    <?php endif; ?>
 
     <?php if (SubjectRepository::count($sid) === 0): ?>
         <div class="alert alert-error">No subjects in catalog. <a href="<?= url('school/subjects.php?action=add') ?>">Add subjects first</a>.</div>

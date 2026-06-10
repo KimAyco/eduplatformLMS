@@ -106,6 +106,52 @@ if ($type === 'material') {
         }
         $inline = true;
     }
+} elseif ($type === 'resource_asset') {
+    $relative = ltrim($file, '/');
+    if (!preg_match('#^\d+/resources/#', $relative)) {
+        $allowed = false;
+    } elseif (($user['role'] ?? '') === 'school_admin' && str_starts_with($relative, schoolId() . '/resources/')) {
+        $allowed = true;
+        $inline = true;
+    } elseif (($user['role'] ?? '') === 'teacher' && str_starts_with($relative, schoolId() . '/resources/')) {
+        $allowed = true;
+        $inline = true;
+    } elseif (($user['role'] ?? '') === 'student') {
+        $stmt = db()->prepare('SELECT COUNT(*) FROM content_resources cr
+            INNER JOIN materials m ON m.content_resource_id = cr.id
+            INNER JOIN classes c ON c.id = m.class_id
+            INNER JOIN class_students cs ON cs.class_id = c.id AND cs.student_id = ?
+            WHERE cr.thumbnail_path = ? OR cr.content LIKE ?');
+        $stmt->execute([(int) $user['id'], $relative, '%' . $relative . '%']);
+        if ((int) $stmt->fetchColumn() > 0) {
+            $allowed = true;
+            $inline = true;
+        }
+        $stmt = db()->prepare('SELECT COUNT(*) FROM library_resources lr
+            WHERE lr.school_id = ? AND lr.status = ? AND (lr.thumbnail_path = ? OR lr.content LIKE ?)');
+        $stmt->execute([schoolId(), 'published', $relative, '%' . $relative . '%']);
+        if ((int) $stmt->fetchColumn() > 0) {
+            $allowed = true;
+            $inline = true;
+        }
+    }
+} elseif ($type === 'library_resource') {
+    $row = LibraryResourceRepository::findByFilePath(ltrim($file, '/'));
+    if ($row) {
+        if (canAccessLibraryResource($row)) {
+            $allowed = true;
+        } elseif (LibraryResourceRepository::userHasClassAccessViaResource((int) $row['id'], $user)) {
+            $allowed = true;
+        } elseif ($user['role'] === 'school_admin' && (int) $row['school_id'] === schoolId()) {
+            $allowed = true;
+        }
+        if ($allowed && ($row['file_access_mode'] ?? 'downloadable') === 'view_only') {
+            $inline = true;
+        }
+        if (!empty($row['original_name'])) {
+            $downloadName = $row['original_name'];
+        }
+    }
 }
 
 if (!$allowed) {

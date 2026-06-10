@@ -11,6 +11,20 @@ if ($files === []) {
         '017_quiz_question_types.sql',
         '018_quiz_answer_payload.sql',
         '019_gradebook.sql',
+        '020_messaging.sql',
+        '021_message_edit_unsend.sql',
+        '022_message_edit_history.sql',
+        '023_message_replies.sql',
+        '024_programs.sql',
+        '025_library.sql',
+        '026_content_resources.sql',
+        '027_ai_platform.sql',
+        '028_lesson_context.sql',
+        '029_practice_quizzes.sql',
+        '030_practice_course_scope.sql',
+        '031_school_practice_setting.sql',
+        '032_announcements.sql',
+        '033_ai_analytics_index.sql',
     ];
 }
 
@@ -33,6 +47,11 @@ foreach ($files as $file) {
     $statements = preg_split('/;\s*\R/', $sql) ?: [];
 
     foreach ($statements as $stmt) {
+        $stmt = trim($stmt);
+        if ($stmt === '') {
+            continue;
+        }
+        $stmt = preg_replace('/^(--[^\n]*\n?)+/', '', $stmt) ?? $stmt;
         $stmt = trim($stmt);
         if ($stmt === '' || str_starts_with($stmt, '--')) {
             continue;

@@ -198,14 +198,22 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
 <?php elseif ($action !== 'add' && !$editUser): ?>
 <div class="admin-table-card">
 <div class="table-wrap">
-    <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Subjects</th><th>Status</th><th>Actions</th></tr></thead>
+    <table class="admin-data-table admin-data-table--people">
+        <thead>
+            <tr>
+                <th class="col-name">Name</th>
+                <th class="col-email">Email</th>
+                <th class="col-tags">Subjects</th>
+                <th class="col-status">Status</th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
+            </tr>
+        </thead>
         <tbody>
         <?php foreach ($teachers as $t): ?>
             <tr class="table-row-link" data-href="<?= e(url('school/teacher.php?id=' . $t['id'])) ?>" tabindex="0">
-                <td><?= tableUserCell($t['first_name'], $t['last_name'], $t) ?></td>
-                <td><?= e($t['email']) ?></td>
-                <td>
+                <td class="col-name"><?= tableUserCell($t['first_name'], $t['last_name'], $t) ?></td>
+                <td class="col-email" title="<?= e($t['email']) ?>"><?= e($t['email']) ?></td>
+                <td class="col-tags">
                     <?php if (!empty($teacherSubjectMap[$t['id']])): ?>
                         <div class="subject-tags">
                             <?php foreach ($teacherSubjectMap[$t['id']] as $tag): ?>
@@ -213,14 +221,28 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                             <?php endforeach; ?>
                         </div>
                     <?php else: ?>
-                        <span class="text-muted">None assigned</span>
+                        <span class="text-muted">None</span>
                     <?php endif; ?>
                 </td>
-                <td><span class="badge badge-<?= $t['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($t['status'])) ?></span></td>
+                <td class="col-status"><span class="badge badge-<?= $t['status'] === 'active' ? 'active' : 'suspended' ?>"><?= e(ucfirst($t['status'])) ?></span></td>
                 <td class="actions">
-                    <a href="<?= url('school/teachers.php?action=edit&id=' . $t['id']) ?>" class="btn btn-sm btn-secondary">Edit</a>
-                    <form method="post" style="display:inline"><?= csrfField() ?><input type="hidden" name="form_action" value="toggle"><input type="hidden" name="user_id" value="<?= $t['id'] ?>"><button class="btn btn-sm btn-secondary"><?= $t['status'] === 'active' ? 'Deactivate' : 'Activate' ?></button></form>
-                    <form method="post" style="display:inline" data-confirm="Delete this teacher?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete"><input type="hidden" name="user_id" value="<?= $t['id'] ?>"><button class="btn btn-sm btn-danger">Delete</button></form>
+                    <div class="table-row-actions">
+                        <a href="<?= url('school/teachers.php?action=edit&id=' . $t['id']) ?>" class="table-action-btn" title="Edit" aria-label="Edit <?= e($t['first_name'] . ' ' . $t['last_name']) ?>"><i class="fa-solid fa-pen"></i></a>
+                        <form method="post">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="form_action" value="toggle">
+                            <input type="hidden" name="user_id" value="<?= (int) $t['id'] ?>">
+                            <button type="submit" class="table-action-btn" title="<?= $t['status'] === 'active' ? 'Deactivate' : 'Activate' ?>" aria-label="<?= $t['status'] === 'active' ? 'Deactivate' : 'Activate' ?> <?= e($t['first_name']) ?>">
+                                <i class="fa-solid <?= $t['status'] === 'active' ? 'fa-user-slash' : 'fa-user-check' ?>"></i>
+                            </button>
+                        </form>
+                        <form method="post" data-confirm="Delete this teacher?">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="form_action" value="delete">
+                            <input type="hidden" name="user_id" value="<?= (int) $t['id'] ?>">
+                            <button type="submit" class="table-action-btn table-action-btn--danger" title="Delete" aria-label="Delete <?= e($t['first_name']) ?>"><i class="fa-solid fa-trash"></i></button>
+                        </form>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>

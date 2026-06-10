@@ -16,6 +16,12 @@ $setupSteps = [
         'url' => 'school/subjects.php?action=add',
     ],
     [
+        'done' => $setup['programs'],
+        'label' => 'Build program curricula',
+        'desc' => 'Create programs with levels, terms, and required subjects.',
+        'url' => 'school/programs.php?action=add',
+    ],
+    [
         'done' => $setup['teachers'],
         'label' => 'Add teachers & teachable subjects',
         'desc' => 'Register teachers and select which subjects each can teach.',
@@ -116,6 +122,7 @@ require __DIR__ . '/../includes/layout/dashboard_welcome.php';
     <h2><i class="fa-solid fa-bolt"></i> Quick actions</h2>
     <div class="action-tiles">
         <a href="<?= url('school/subjects.php?action=add') ?>" class="action-tile"><i class="fa-solid fa-book"></i><span>Add subject</span></a>
+        <a href="<?= url('school/programs.php?action=add') ?>" class="action-tile"><i class="fa-solid fa-sitemap"></i><span>Add program</span></a>
         <a href="<?= url('school/teachers.php?action=add') ?>" class="action-tile"><i class="fa-solid fa-user-plus"></i><span>Add teacher</span></a>
         <a href="<?= url('school/students.php?action=add') ?>" class="action-tile"><i class="fa-solid fa-user-graduate"></i><span>Add student</span></a>
         <a href="<?= url('school/class-groups.php?action=add') ?>" class="action-tile"><i class="fa-solid fa-layer-group"></i><span>Add class group</span></a>

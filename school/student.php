@@ -38,6 +38,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('success', 'Student removed.');
         redirect('school/students.php');
     }
+
+    if ($postAction === 'enroll_program') {
+        $programId = (int) ($_POST['program_id'] ?? 0);
+        if ($programId <= 0) {
+            flash('error', 'Select a program.');
+        } elseif (ProgramRepository::enrollStudent($userId, $programId, $sid)) {
+            flash('success', 'Student enrolled in program.');
+        } else {
+            flash('error', 'Could not enroll student in program.');
+        }
+        redirect('school/student.php?id=' . $studentId);
+    }
+
+    if ($postAction === 'withdraw_program') {
+        $programId = (int) ($_POST['program_id'] ?? 0);
+        if ($programId > 0 && ProgramRepository::withdrawStudent($userId, $programId, $sid)) {
+            flash('success', 'Student withdrawn from program.');
+        } else {
+            flash('error', 'Could not update program enrollment.');
+        }
+        redirect('school/student.php?id=' . $studentId);
+    }
 }
 
 $errors = handleUserProfilePhotoPost($student, 'school/student.php?id=' . $studentId);
@@ -45,6 +67,9 @@ $student = UserRepository::getByRole($studentId, $sid, 'student') ?? $student;
 
 $groups = ClassGroupRepository::groupsForStudent($studentId, $sid);
 $classes = ClassRepository::forStudent($studentId, $sid);
+$studentPrograms = ProgramRepository::studentPrograms($studentId, $sid);
+$availablePrograms = ProgramRepository::forSchool($sid);
+$enrolledProgramIds = array_map(static fn ($p) => (int) $p['id'], $studentPrograms);
 $fullName = trim($student['first_name'] . ' ' . $student['last_name']);
 
 $pageTitle = $fullName;
@@ -117,6 +142,56 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                 <dd><?= formatDate($student['updated_at'], 'M j, Y g:i A') ?></dd>
             </div>
         </dl>
+    </div>
+
+    <div class="panel user-profile-panel">
+        <h3>Programs</h3>
+        <?php if (empty($studentPrograms)): ?>
+            <p class="text-muted mb-1">Not enrolled in a program yet.</p>
+        <?php else: ?>
+            <div class="table-wrap mb-1">
+                <table>
+                    <thead><tr><th>Program</th><th>Status</th><th>Enrolled</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($studentPrograms as $program): ?>
+                        <tr>
+                            <td><?= e($program['name']) ?></td>
+                            <td><?= e(ucfirst($program['status'])) ?></td>
+                            <td><?= formatDate($program['enrolled_at'], 'M j, Y') ?></td>
+                            <td>
+                                <?php if ($program['status'] === 'active'): ?>
+                                <form method="post" style="display:inline" data-confirm="Withdraw this student from the program?">
+                                    <?= csrfField() ?>
+                                    <input type="hidden" name="form_action" value="withdraw_program">
+                                    <input type="hidden" name="user_id" value="<?= $studentId ?>">
+                                    <input type="hidden" name="program_id" value="<?= (int) $program['id'] ?>">
+                                    <button class="btn btn-sm btn-danger">Withdraw</button>
+                                </form>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+        <?php
+        $programsToAdd = array_filter($availablePrograms, static fn ($p) => !in_array((int) $p['id'], $enrolledProgramIds, true));
+        ?>
+        <?php if (!empty($programsToAdd)): ?>
+        <form method="post" class="inline-assign-form filter-bar">
+            <?= csrfField() ?>
+            <input type="hidden" name="form_action" value="enroll_program">
+            <input type="hidden" name="user_id" value="<?= $studentId ?>">
+            <select name="program_id" class="form-control" required>
+                <option value="">Enroll in program…</option>
+                <?php foreach ($programsToAdd as $program): ?>
+                <option value="<?= (int) $program['id'] ?>"><?= e($program['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Enroll</button>
+        </form>
+        <?php endif; ?>
     </div>
 
     <div class="panel user-profile-panel">

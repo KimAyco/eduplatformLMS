@@ -100,8 +100,34 @@ function gradeQuizAttempt(int $attemptId): void
         ->execute([round($totalScore, 2), $status, $attemptId]);
 
     if ($status === 'graded') {
-        syncQuizAttemptToGradebook($attemptId);
+        $quizStmt = db()->prepare('SELECT * FROM quizzes WHERE id = ?');
+        $quizStmt->execute([(int) $attempt['quiz_id']]);
+        $quizRow = $quizStmt->fetch();
+        $isPractice = isPracticeQuiz($quizRow ?: []);
+
+        if (!$isPractice && (int) ($quizRow['counts_toward_gradebook'] ?? 1) === 1) {
+            syncQuizAttemptToGradebook($attemptId);
+        }
+
+        if ($isPractice && $attempt['max_score'] > 0) {
+            $pct = round(((float) $totalScore / (float) $attempt['max_score']) * 100, 2);
+            PracticeQuizService::recordProficiency(
+                (int) $attempt['student_id'],
+                (int) $quizRow['class_id'],
+                isset($quizRow['source_section_id']) ? (int) $quizRow['source_section_id'] : null,
+                $pct,
+                !empty($quizRow['is_course_wide'])
+            );
+        }
     }
+}
+
+function isPracticeQuiz(?array $quiz): bool
+{
+    if (!$quiz) {
+        return false;
+    }
+    return ($quiz['quiz_mode'] ?? 'exam') === 'practice';
 }
 
 function getQuizTotalPoints(int $quizId): float
@@ -120,8 +146,20 @@ function studentQuizAttempts(int $quizId, int $studentId): int
 
 function canStudentTakeQuiz(array $quiz, int $studentId): array
 {
-    if (isset($quiz['is_published']) && !(int) $quiz['is_published']) {
+    $practice = isPracticeQuiz($quiz);
+
+    if (!$practice && isset($quiz['is_published']) && !(int) $quiz['is_published']) {
         return ['ok' => false, 'reason' => 'This quiz is not published yet.'];
+    }
+
+    $inProgress = db()->prepare("SELECT id FROM quiz_attempts WHERE quiz_id=? AND student_id=? AND status='in_progress'");
+    $inProgress->execute([$quiz['id'], $studentId]);
+    if ($inProgress->fetch()) {
+        return ['ok' => true, 'resume' => true];
+    }
+
+    if ($practice) {
+        return ['ok' => true, 'resume' => false];
     }
 
     $now = time();
@@ -133,12 +171,6 @@ function canStudentTakeQuiz(array $quiz, int $studentId): array
     $closesAt = $quiz['closes_at'] ?? $quiz['due_date'] ?? null;
     if ($closesAt && strtotime($closesAt) < $now) {
         return ['ok' => false, 'reason' => 'This quiz is closed.'];
-    }
-
-    $inProgress = db()->prepare("SELECT id FROM quiz_attempts WHERE quiz_id=? AND student_id=? AND status='in_progress'");
-    $inProgress->execute([$quiz['id'], $studentId]);
-    if ($inProgress->fetch()) {
-        return ['ok' => true, 'resume' => true];
     }
 
     $attempts = studentQuizAttempts($quiz['id'], $studentId);

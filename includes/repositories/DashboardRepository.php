@@ -73,6 +73,7 @@ class DashboardRepository
     {
         return [
             'subjects'        => SubjectRepository::count($schoolId) > 0,
+            'programs'        => ProgramRepository::count($schoolId) > 0,
             'teachers'        => SubjectRepository::teachersWithSubjectsCount($schoolId) > 0,
             'groups_offered'  => ClassGroupRepository::groupsWithOfferingsCount($schoolId) > 0,
             'students_enrolled' => ClassGroupRepository::enrolledStudentsCount($schoolId) > 0,

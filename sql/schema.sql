@@ -9,6 +9,12 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS student_component_grades;
 DROP TABLE IF EXISTS class_grading_links;
 DROP TABLE IF EXISTS subject_grading_components;
+DROP TABLE IF EXISTS user_notifications;
+DROP TABLE IF EXISTS announcement_targets;
+DROP TABLE IF EXISTS announcements;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS conversation_participants;
+DROP TABLE IF EXISTS conversations;
 DROP TABLE IF EXISTS quiz_attempt_answers;
 DROP TABLE IF EXISTS quiz_attempts;
 DROP TABLE IF EXISTS quiz_options;
@@ -16,6 +22,7 @@ DROP TABLE IF EXISTS quiz_questions;
 DROP TABLE IF EXISTS quizzes;
 DROP TABLE IF EXISTS assignment_submissions;
 DROP TABLE IF EXISTS assignments;
+DROP TABLE IF EXISTS library_resources;
 DROP TABLE IF EXISTS materials;
 DROP TABLE IF EXISTS course_sections;
 DROP TABLE IF EXISTS class_group_students;
@@ -39,6 +46,7 @@ CREATE TABLE schools (
     address TEXT DEFAULT NULL,
     cover_image VARCHAR(512) DEFAULT NULL,
     logo_image VARCHAR(512) DEFAULT NULL,
+    practice_quizzes_enabled TINYINT(1) NOT NULL DEFAULT 1,
     status ENUM('pending', 'active', 'rejected', 'suspended') NOT NULL DEFAULT 'pending',
     registered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_at DATETIME DEFAULT NULL,
@@ -74,9 +82,13 @@ CREATE TABLE class_groups (
     name VARCHAR(100) NOT NULL,
     description TEXT DEFAULT NULL,
     academic_year VARCHAR(20) DEFAULT NULL,
+    program_id INT UNSIGNED NULL DEFAULT NULL,
+    program_level_id INT UNSIGNED NULL DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_class_groups_school (school_id),
+    KEY idx_class_groups_program (program_id),
+    KEY idx_class_groups_program_level (program_level_id),
     CONSTRAINT fk_class_groups_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -107,6 +119,68 @@ CREATE TABLE subject_grading_components (
     CONSTRAINT fk_sgc_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
     CONSTRAINT fk_sgc_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE programs (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50) DEFAULT NULL,
+    description TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_programs_school_name (school_id, name),
+    KEY idx_programs_school (school_id),
+    CONSTRAINT fk_programs_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE program_levels (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    program_id INT UNSIGNED NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    level_order SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_program_levels_order (program_id, level_order),
+    KEY idx_program_levels_program (program_id),
+    CONSTRAINT fk_program_levels_program FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE program_terms (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    program_level_id INT UNSIGNED NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    term_order SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_program_terms_order (program_level_id, term_order),
+    KEY idx_program_terms_level (program_level_id),
+    CONSTRAINT fk_program_terms_level FOREIGN KEY (program_level_id) REFERENCES program_levels(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE program_term_subjects (
+    program_term_id INT UNSIGNED NOT NULL,
+    subject_id INT UNSIGNED NOT NULL,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (program_term_id, subject_id),
+    KEY idx_pts_subject (subject_id),
+    CONSTRAINT fk_pts_term FOREIGN KEY (program_term_id) REFERENCES program_terms(id) ON DELETE CASCADE,
+    CONSTRAINT fk_pts_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE student_program_enrollments (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    student_id INT UNSIGNED NOT NULL,
+    program_id INT UNSIGNED NOT NULL,
+    status ENUM('active', 'completed', 'withdrawn') NOT NULL DEFAULT 'active',
+    enrolled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_student_program (student_id, program_id),
+    KEY idx_spe_program (program_id),
+    KEY idx_spe_student (student_id),
+    CONSTRAINT fk_spe_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_spe_program FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE class_groups
+    ADD CONSTRAINT fk_class_groups_program FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_class_groups_program_level FOREIGN KEY (program_level_id) REFERENCES program_levels(id) ON DELETE SET NULL;
 
 CREATE TABLE classes (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -167,11 +241,73 @@ CREATE TABLE course_sections (
     CONSTRAINT fk_course_sections_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE library_resources (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    created_by INT UNSIGNED NOT NULL,
+    source_material_id INT UNSIGNED DEFAULT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT DEFAULT NULL,
+    resource_kind ENUM('lesson', 'book', 'module', 'worksheet', 'reference', 'other') NOT NULL DEFAULT 'other',
+    subject_id INT UNSIGNED DEFAULT NULL,
+    type VARCHAR(16) NOT NULL DEFAULT 'file',
+    content LONGTEXT DEFAULT NULL,
+    body TEXT DEFAULT NULL,
+    file_path VARCHAR(500) DEFAULT NULL,
+    original_name VARCHAR(255) DEFAULT NULL,
+    mime_type VARCHAR(120) DEFAULT NULL,
+    file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    file_access_mode ENUM('view_only', 'downloadable') NOT NULL DEFAULT 'downloadable',
+    external_link VARCHAR(500) DEFAULT NULL,
+    status ENUM('pending', 'published', 'rejected') NOT NULL DEFAULT 'pending',
+    audience ENUM('all', 'teachers') NOT NULL DEFAULT 'all',
+    rejection_note TEXT DEFAULT NULL,
+    approved_by INT UNSIGNED DEFAULT NULL,
+    approved_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_library_school (school_id),
+    KEY idx_library_status (school_id, status),
+    KEY idx_library_subject (subject_id),
+    KEY idx_library_source_material (source_material_id),
+    KEY idx_library_file_path (file_path(191)),
+    CONSTRAINT fk_library_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
+    CONSTRAINT fk_library_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_library_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_library_approved_by FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE content_resources (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    created_by INT UNSIGNED NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT DEFAULT NULL,
+    subject_id INT UNSIGNED DEFAULT NULL,
+    resource_type ENUM('deck', 'doc') NOT NULL DEFAULT 'deck',
+    content LONGTEXT DEFAULT NULL,
+    thumbnail_path VARCHAR(500) DEFAULT NULL,
+    status ENUM('draft', 'archived') NOT NULL DEFAULT 'draft',
+    library_resource_id INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_content_resources_school (school_id),
+    KEY idx_content_resources_creator (school_id, created_by),
+    KEY idx_content_resources_type (school_id, resource_type),
+    KEY idx_content_resources_library (library_resource_id),
+    CONSTRAINT fk_content_resources_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
+    CONSTRAINT fk_content_resources_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_content_resources_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL,
+    CONSTRAINT fk_content_resources_library FOREIGN KEY (library_resource_id) REFERENCES library_resources(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE materials (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     class_id INT UNSIGNED NOT NULL,
     section_id INT UNSIGNED DEFAULT NULL,
     teacher_id INT UNSIGNED NOT NULL,
+    library_resource_id INT UNSIGNED DEFAULT NULL,
+    content_resource_id INT UNSIGNED DEFAULT NULL,
     type VARCHAR(16) NOT NULL DEFAULT 'file',
     title VARCHAR(255) NOT NULL,
     content LONGTEXT DEFAULT NULL,
@@ -186,10 +322,17 @@ CREATE TABLE materials (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_materials_class (class_id),
     KEY idx_materials_section (section_id),
+    KEY idx_materials_library (library_resource_id),
+    KEY idx_materials_content_resource (content_resource_id),
     CONSTRAINT fk_materials_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
     CONSTRAINT fk_materials_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE SET NULL,
-    CONSTRAINT fk_materials_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
+    CONSTRAINT fk_materials_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_materials_library FOREIGN KEY (library_resource_id) REFERENCES library_resources(id) ON DELETE SET NULL,
+    CONSTRAINT fk_materials_content_resource FOREIGN KEY (content_resource_id) REFERENCES content_resources(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE library_resources
+    ADD CONSTRAINT fk_library_source_material FOREIGN KEY (source_material_id) REFERENCES materials(id) ON DELETE SET NULL;
 
 CREATE TABLE assignments (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -243,10 +386,17 @@ CREATE TABLE quizzes (
     show_score_to_students TINYINT(1) NOT NULL DEFAULT 1,
     cover_image VARCHAR(512) DEFAULT NULL,
     max_attempts INT UNSIGNED NOT NULL DEFAULT 1,
+    quiz_mode ENUM('exam', 'practice') NOT NULL DEFAULT 'exam',
+    source_section_id INT UNSIGNED DEFAULT NULL,
+    context_version VARCHAR(64) DEFAULT NULL,
+    is_ai_generated TINYINT(1) NOT NULL DEFAULT 0,
+    counts_toward_gradebook TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_quizzes_class (class_id),
     KEY idx_quizzes_section (section_id),
+    KEY idx_quizzes_mode (quiz_mode),
+    KEY idx_quizzes_practice_section (class_id, source_section_id, quiz_mode),
     CONSTRAINT fk_quizzes_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
     CONSTRAINT fk_quizzes_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE SET NULL,
     CONSTRAINT fk_quizzes_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
@@ -354,5 +504,203 @@ CREATE TABLE student_component_grades (
     CONSTRAINT fk_scg_component FOREIGN KEY (component_id) REFERENCES subject_grading_components(id) ON DELETE CASCADE,
     CONSTRAINT fk_scg_quiz_attempt FOREIGN KEY (source_quiz_attempt_id) REFERENCES quiz_attempts(id) ON DELETE SET NULL,
     CONSTRAINT fk_scg_submission FOREIGN KEY (source_submission_id) REFERENCES assignment_submissions(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE conversations (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_conversations_school_updated (school_id, updated_at),
+    CONSTRAINT fk_conversations_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE conversation_participants (
+    conversation_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    last_read_message_id INT UNSIGNED DEFAULT NULL,
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (conversation_id, user_id),
+    KEY idx_cp_user (user_id),
+    CONSTRAINT fk_cp_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE messages (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    conversation_id INT UNSIGNED NOT NULL,
+    sender_id INT UNSIGNED NOT NULL,
+    reply_to_message_id INT UNSIGNED NULL DEFAULT NULL,
+    body TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    edited_at DATETIME NULL DEFAULT NULL,
+    deleted_at DATETIME NULL DEFAULT NULL,
+    KEY idx_messages_conversation_id (conversation_id, id),
+    KEY idx_messages_sender (sender_id),
+    KEY idx_messages_reply_to (reply_to_message_id),
+    CONSTRAINT fk_messages_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_messages_reply_to FOREIGN KEY (reply_to_message_id) REFERENCES messages(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE message_edits (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    message_id INT UNSIGNED NOT NULL,
+    body TEXT NOT NULL,
+    saved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_message_edits_message (message_id, saved_at),
+    CONSTRAINT fk_message_edits_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE message_user_hidden (
+    message_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    hidden_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id),
+    KEY idx_message_user_hidden_user (user_id),
+    CONSTRAINT fk_message_user_hidden_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    CONSTRAINT fk_message_user_hidden_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE announcements (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    school_id INT UNSIGNED NOT NULL,
+    created_by INT UNSIGNED NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    priority ENUM('normal', 'important', 'urgent') NOT NULL DEFAULT 'normal',
+    link_url VARCHAR(512) NULL DEFAULT NULL,
+    link_label VARCHAR(100) NULL DEFAULT NULL,
+    status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
+    published_at DATETIME NULL DEFAULT NULL,
+    expires_at DATETIME NULL DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_announcements_school_status (school_id, status, published_at),
+    CONSTRAINT fk_announcements_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
+    CONSTRAINT fk_announcements_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE announcement_targets (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    announcement_id INT UNSIGNED NOT NULL,
+    target_type VARCHAR(40) NOT NULL,
+    target_id INT UNSIGNED NULL DEFAULT NULL,
+    KEY idx_announcement_targets_announcement (announcement_id),
+    CONSTRAINT fk_announcement_targets_announcement FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE user_notifications (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    announcement_id INT UNSIGNED NOT NULL,
+    read_at DATETIME NULL DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_notification (user_id, announcement_id),
+    KEY idx_user_notifications_user_unread (user_id, read_at, created_at),
+    CONSTRAINT fk_user_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_notifications_announcement FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE platform_settings (
+    setting_key VARCHAR(64) NOT NULL PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_by INT UNSIGNED DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE ai_request_queue (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    job_type VARCHAR(64) NOT NULL,
+    status ENUM('pending', 'processing', 'completed', 'failed', 'cancelled') NOT NULL DEFAULT 'pending',
+    priority TINYINT UNSIGNED NOT NULL DEFAULT 5,
+    payload JSON NOT NULL,
+    prompt_preview VARCHAR(500) DEFAULT NULL,
+    result JSON DEFAULT NULL,
+    error_message TEXT DEFAULT NULL,
+    assigned_key_index TINYINT UNSIGNED DEFAULT NULL,
+    requested_by INT UNSIGNED DEFAULT NULL,
+    school_id INT UNSIGNED DEFAULT NULL,
+    started_at DATETIME DEFAULT NULL,
+    completed_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_ai_queue_status (status, priority, created_at),
+    KEY idx_ai_queue_user (requested_by),
+    KEY idx_ai_queue_school (school_id),
+    KEY idx_ai_queue_school_created (school_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE ai_key_usage (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    key_index TINYINT UNSIGNED NOT NULL,
+    window_start DATETIME NOT NULL,
+    request_count INT UNSIGNED NOT NULL DEFAULT 1,
+    UNIQUE KEY uq_ai_key_window (key_index, window_start),
+    KEY idx_ai_key_window (window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE lesson_contexts (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    class_id INT UNSIGNED NOT NULL,
+    section_id INT UNSIGNED DEFAULT NULL,
+    context_text LONGTEXT DEFAULT NULL,
+    sources_hash VARCHAR(64) NOT NULL DEFAULT '',
+    token_estimate INT UNSIGNED NOT NULL DEFAULT 0,
+    status ENUM('pending', 'ready', 'empty', 'error') NOT NULL DEFAULT 'pending',
+    last_indexed_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_lesson_context (class_id, section_id),
+    KEY idx_lesson_context_class (class_id),
+    CONSTRAINT fk_lesson_context_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_lesson_context_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE lesson_context_sources (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    lesson_context_id INT UNSIGNED NOT NULL,
+    source_type ENUM('material', 'library', 'exam_meta', 'upload') NOT NULL,
+    source_id INT UNSIGNED DEFAULT NULL,
+    title VARCHAR(255) NOT NULL DEFAULT '',
+    content_hash VARCHAR(64) NOT NULL DEFAULT '',
+    excerpt TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_lcs_context (lesson_context_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE practice_question_bank (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    class_id INT UNSIGNED NOT NULL,
+    section_id INT UNSIGNED DEFAULT NULL,
+    quiz_id INT UNSIGNED DEFAULT NULL,
+    question_json LONGTEXT NOT NULL,
+    difficulty VARCHAR(32) NOT NULL DEFAULT 'mixed',
+    context_version VARCHAR(64) NOT NULL DEFAULT '',
+    item_count INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_practice_bank (class_id, section_id),
+    KEY idx_practice_bank_quiz (quiz_id),
+    CONSTRAINT fk_practice_bank_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_practice_bank_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE CASCADE,
+    CONSTRAINT fk_practice_bank_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE student_lesson_proficiency (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    student_id INT UNSIGNED NOT NULL,
+    class_id INT UNSIGNED NOT NULL,
+    section_id INT UNSIGNED DEFAULT NULL,
+    attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    best_score_pct DECIMAL(5,2) DEFAULT NULL,
+    avg_score_pct DECIMAL(5,2) DEFAULT NULL,
+    last_attempt_at DATETIME DEFAULT NULL,
+    proficiency_level ENUM('beginner', 'developing', 'proficient', 'mastery') NOT NULL DEFAULT 'beginner',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_student_lesson_prof (student_id, class_id, section_id),
+    KEY idx_slp_class (class_id),
+    CONSTRAINT fk_slp_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_slp_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_slp_section FOREIGN KEY (section_id) REFERENCES course_sections(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

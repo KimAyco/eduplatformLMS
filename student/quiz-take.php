@@ -18,6 +18,11 @@ if (!$quiz) {
     redirect('student/classes.php');
 }
 
+if (isPracticeQuiz($quiz) && !schoolPracticeQuizzesEnabled()) {
+    flash('error', 'Practice quizzes are not enabled for your school.');
+    redirect('student/course.php?id=' . (int) $quiz['class_id']);
+}
+
 $can = canStudentTakeQuiz($quiz, $user['id']);
 
 $attempt = db()->prepare("SELECT * FROM quiz_attempts WHERE quiz_id=? AND student_id=? AND status='in_progress' ORDER BY id DESC LIMIT 1");
@@ -106,13 +111,22 @@ $timeLimitSec = $quiz['time_limit_minutes'] ? $quiz['time_limit_minutes'] * 60 :
 $elapsed = time() - strtotime($attempt['started_at']);
 $coverUrl = quizCoverServeUrl($quiz['cover_image'] ?? null);
 
+$isPractice = isPracticeQuiz($quiz);
+
 $pageTitle = $quiz['title'];
 $pageHeading = $quiz['title'];
-$activeMenu = 'classes';
+$activeMenu = $isPractice ? 'practice' : 'classes';
 $menuItems = studentMenu();
 
 require __DIR__ . '/../includes/layout/dashboard_header.php';
 ?>
+
+<?php if ($isPractice): ?>
+<div class="stu-alert stu-alert--info practice-quiz-banner">
+    <i class="fa-solid fa-robot"></i>
+    <div><strong>Practice mode</strong> — scores are for self-study only and do not affect your grade.</div>
+</div>
+<?php endif; ?>
 
 <?php if ($coverUrl): ?>
 <div class="quiz-take-cover" style="background-image:url('<?= e($coverUrl) ?>')"></div>
@@ -137,7 +151,7 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
     <?php if (empty($questions)): ?>
         <p class="text-muted">This quiz has no questions yet.</p>
     <?php else: ?>
-        <button type="submit" class="btn btn-primary" onclick="return confirm('Submit quiz? You cannot change answers after submitting.')">Submit Quiz</button>
+        <button type="submit" class="btn btn-primary" onclick="return confirm('<?= $isPractice ? 'Submit practice quiz?' : 'Submit quiz? You cannot change answers after submitting.' ?>')"><?= $isPractice ? 'Submit practice' : 'Submit Quiz' ?></button>
     <?php endif; ?>
 </form>
 

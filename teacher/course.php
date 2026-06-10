@@ -54,6 +54,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (RuntimeException $e) {
             $errors[] = $e->getMessage();
         }
+    } elseif ($postAction === 'share_material_to_library') {
+        $materialId = (int) ($_POST['material_id'] ?? 0);
+        $mat = MaterialRepository::findForTeacher($materialId, (int) $user['id']);
+        if (!$mat || (int) $mat['class_id'] !== $classId) {
+            flash('error', 'Material not found.');
+        } elseif (!canSubmitMaterialToLibrary($mat, (int) $user['id'])) {
+            flash('error', 'This material cannot be shared to the library.');
+        } else {
+            try {
+                LibraryResourceRepository::createFromMaterial(schoolId(), (int) $user['id'], $mat, [
+                    'description' => trim($_POST['description'] ?? '') ?: ($mat['body'] ?? null),
+                    'resource_kind' => $_POST['resource_kind'] ?? 'other',
+                    'subject_id' => (int) ($_POST['subject_id'] ?? 0) ?: null,
+                    'audience' => ($_POST['audience'] ?? 'all') === 'teachers' ? 'teachers' : 'all',
+                ]);
+                flash('success', 'Submitted to the Virtual Library for admin approval.');
+            } catch (InvalidArgumentException $e) {
+                flash('error', $e->getMessage());
+            }
+        }
+        redirect('teacher/course.php?id=' . $classId);
+    } elseif ($postAction === 'attach_from_resources') {
+        $resourceId = (int) ($_POST['resource_id'] ?? 0);
+        $sectionId = (int) ($_POST['section_id'] ?? 0) ?: null;
+        try {
+            ContentResourceRepository::attachToClass($resourceId, $classId, $sectionId, (int) $user['id'], schoolId());
+            flash('success', 'Resource added to your course.');
+        } catch (InvalidArgumentException $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('teacher/course.php?id=' . $classId);
     } elseif ($postAction === 'add_material' || $postAction === 'edit_material') {
         $title = trim($_POST['title'] ?? '');
         $body = trim($_POST['body'] ?? '');
@@ -115,6 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'file_access_mode' => $matType === 'file' ? $fileAccess : 'downloadable',
                 ]);
                 flash('success', 'Material added.');
+                lessonContextReindexClass($classId);
                 redirect('teacher/course.php?id=' . $classId);
             } catch (RuntimeException $e) {
                 $errors[] = $e->getMessage();
@@ -157,6 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'section_id' => $sectionId,
                     ]);
                     flash('success', 'Material updated.');
+                    lessonContextReindexClass($classId);
                     redirect('teacher/course.php?id=' . $classId);
                 } catch (RuntimeException $e) {
                     $errors[] = $e->getMessage();
@@ -171,6 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($mat && (int) $mat['class_id'] === $classId) {
             MaterialRepository::delete($materialId);
             flash('success', 'Material deleted.');
+            lessonContextReindexClass($classId);
         }
         redirect('teacher/course.php?id=' . $classId);
     } elseif ($postAction === 'add_assignment' || $postAction === 'edit_assignment') {
@@ -222,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$classId, $sectionId, $user['id'], $title]);
             $newId = (int) db()->lastInsertId();
             flash('success', 'Quiz created. Add your questions next.');
+            lessonContextReindexClass($classId);
             redirect(quizEditUrl($newId, $classId, 'questions'));
         } else {
             $action = 'add_quiz';
@@ -230,6 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $quizId = (int) ($_POST['quiz_id'] ?? 0);
         db()->prepare('DELETE FROM quizzes WHERE id=? AND class_id=? AND teacher_id=?')->execute([$quizId, $classId, $user['id']]);
         flash('success', 'Quiz deleted.');
+        lessonContextReindexClass($classId);
         redirect('teacher/course.php?id=' . $classId);
     } elseif ($postAction === 'add_section' || $postAction === 'edit_section') {
         $sectionId = (int) ($_POST['section_id'] ?? 0);
@@ -241,6 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($postAction === 'add_section' && empty($errors)) {
             CourseSectionRepository::create($classId, $title, $description ?: null);
             flash('success', 'Lesson section added.');
+            lessonContextReindexClass($classId);
             redirect('teacher/course.php?id=' . $classId);
         } elseif ($postAction === 'edit_section' && $sectionId && empty($errors)) {
             if (CourseSectionRepository::update($sectionId, $classId, $title, $description ?: null)) {
@@ -248,6 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 flash('error', 'Could not update section.');
             }
+            lessonContextReindexClass($classId);
             redirect('teacher/course.php?id=' . $classId);
         } else {
             $action = $postAction === 'edit_section' ? 'edit_section' : 'add_section';
@@ -259,6 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sectionId = (int) ($_POST['section_id'] ?? 0);
         if (CourseSectionRepository::delete($sectionId, $classId)) {
             flash('success', 'Lesson section deleted.');
+            lessonContextReindexClass($classId);
         } else {
             flash('error', 'Could not delete section.');
         }
@@ -269,6 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $targetSection = ($_POST['section_id'] ?? '') !== '' ? (int) $_POST['section_id'] : null;
         if (CourseSectionRepository::moveItem($itemType, $itemId, $classId, $targetSection)) {
             flash('success', 'Activity moved.');
+            lessonContextReindexClass($classId);
         } else {
             flash('error', 'Could not move activity.');
         }
@@ -329,10 +369,17 @@ if ($action === 'edit_section' && $sectionIdParam) {
 
 $sections = CourseSectionRepository::forClass($classId);
 $courseContent = CourseSectionRepository::loadCourseContent($classId, null, (int) $user['id']);
+$subjects = SubjectRepository::forSchool(schoolId());
+require_once __DIR__ . '/../includes/layout/resources_grid.php';
+$myResources = ContentResourceRepository::forSchool(schoolId(), [
+    'created_by' => (int) $user['id'],
+]);
 $materialCount = $courseContent['material_count'];
 $assignmentCount = $courseContent['assignment_count'];
 $quizCount = $courseContent['quiz_count'];
 $activityCount = $courseContent['activity_count'];
+$enrolledStudents = ClassGroupRepository::enrolledStudents((int) $class['class_group_id']);
+$studentCount = count($enrolledStudents);
 $defaultFormSectionId = $sectionIdParam ?: ($sections[0]['id'] ?? null);
 $courseInitial = strtoupper(mb_substr($class['name'], 0, 1));
 $formOpen = !$quizWizardCtx && in_array($action, ['add_material', 'edit_material', 'add_assignment', 'edit_assignment', 'add_quiz', 'add_section', 'edit_section'], true);
@@ -397,17 +444,31 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
                 <a href="<?= teacherCourseUrl($classId, 'action=add_material') ?>" class="course-builder-btn course-builder-btn--material<?= $formType === 'material' ? ' is-active' : '' ?>">
                     <i class="fa-solid fa-file-lines"></i> Material
                 </a>
+                <button type="button" class="course-builder-btn course-builder-btn--resources" id="openCourseResourcePicker"<?= $myResources === [] ? ' disabled title="Create resources first"' : '' ?>>
+                    <i class="fa-solid fa-folder-open"></i> From resources
+                </button>
+                <a href="<?= url('teacher/library.php?attach_class=' . $classId) ?>" class="course-builder-btn course-builder-btn--library">
+                    <i class="fa-solid fa-book-bookmark"></i> From library
+                </a>
                 <a href="<?= teacherCourseUrl($classId, 'action=add_assignment') ?>" class="course-builder-btn course-builder-btn--assignment<?= $formType === 'assignment' ? ' is-active' : '' ?>">
                     <i class="fa-solid fa-pen-to-square"></i> Assignment
                 </a>
                 <a href="<?= teacherCourseUrl($classId, 'action=add_quiz') ?>" class="course-builder-btn course-builder-btn--quiz<?= $formType === 'quiz' ? ' is-active' : '' ?>">
                     <i class="fa-solid fa-circle-question"></i> Quiz
                 </a>
+                <a href="<?= url('teacher/ai-quiz-builder.php?class_id=' . $classId) ?>" class="course-builder-btn course-builder-btn--ai">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI Quiz
+                </a>
             </div>
         </div>
-        <a href="<?= teacherCourseUrl($classId, 'action=add_section') ?>" class="course-builder-lesson<?= $formType === 'section' ? ' is-active' : '' ?>">
-            <i class="fa-solid fa-folder-plus"></i> New lesson
-        </a>
+        <div class="course-builder-side">
+            <a href="<?= e(teacherClassStudentsUrl($classId)) ?>" class="course-builder-students">
+                <i class="fa-solid fa-user-graduate"></i> View students<?= $studentCount > 0 ? ' (' . $studentCount . ')' : '' ?>
+            </a>
+            <a href="<?= teacherCourseUrl($classId, 'action=add_section') ?>" class="course-builder-lesson<?= $formType === 'section' ? ' is-active' : '' ?>">
+                <i class="fa-solid fa-folder-plus"></i> New lesson
+            </a>
+        </div>
     </div>
 
     <div class="course-main course-main--full">
@@ -612,6 +673,82 @@ require __DIR__ . '/../includes/layout/dashboard_header.php';
             <?php endif; ?>
     </div>
 </div>
+
+<?php renderCourseResourcePickerModal($myResources, $classId, $sections); ?>
+
+<dialog class="library-share-dialog" id="libraryShareDialog">
+    <form method="post" class="library-share-form">
+        <?= csrfField() ?>
+        <input type="hidden" name="form_action" value="share_material_to_library">
+        <input type="hidden" name="material_id" id="libraryShareMaterialId" value="">
+        <header class="library-share-header">
+            <h2>Share to Virtual Library</h2>
+            <p id="libraryShareTitle" class="text-muted"></p>
+            <button type="button" class="library-share-close" data-close-share aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        </header>
+        <p class="text-muted">Your resource will be reviewed by a school admin before it appears in the library.</p>
+        <div class="form-group">
+            <label>Kind</label>
+            <select name="resource_kind" class="form-control">
+                <?php foreach (LibraryResourceRepository::RESOURCE_KINDS as $kind): ?>
+                    <option value="<?= e($kind) ?>"><?= e(resourceKindLabel($kind)) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Subject</label>
+            <select name="subject_id" class="form-control">
+                <option value="">None</option>
+                <?php foreach ($subjects as $subject): ?>
+                    <option value="<?= (int) $subject['id'] ?>"><?= e($subject['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Audience</label>
+            <select name="audience" class="form-control">
+                <option value="all">Teachers & students</option>
+                <option value="teachers">Teachers only</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea name="description" class="form-control" rows="3" placeholder="Optional summary for the library listing"></textarea>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary">Submit for approval</button>
+            <button type="button" class="btn btn-secondary" data-close-share>Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+(function () {
+    var resourcePicker = document.getElementById('courseResourcePickerDialog');
+    var openPicker = document.getElementById('openCourseResourcePicker');
+    if (openPicker && resourcePicker) {
+        openPicker.addEventListener('click', function () { resourcePicker.showModal(); });
+        resourcePicker.querySelectorAll('[data-close-course-resource]').forEach(function (btn) {
+            btn.addEventListener('click', function () { resourcePicker.close(); });
+        });
+    }
+
+    var dialog = document.getElementById('libraryShareDialog');
+    if (!dialog) return;
+    var idInput = document.getElementById('libraryShareMaterialId');
+    var titleEl = document.getElementById('libraryShareTitle');
+    document.querySelectorAll('[data-share-material]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            idInput.value = btn.getAttribute('data-share-material');
+            titleEl.textContent = btn.getAttribute('data-share-title') || '';
+            dialog.showModal();
+        });
+    });
+    document.querySelectorAll('[data-close-share]').forEach(function (btn) {
+        btn.addEventListener('click', function () { dialog.close(); });
+    });
+})();
+</script>
 
 <div class="activity-modal-overlay course-settings-overlay" id="courseSettingsModal" hidden>
     <div class="activity-modal course-settings-modal" role="dialog" aria-modal="true" aria-labelledby="courseSettingsTitle">

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/bootstrap.php';
+require_once __DIR__ . '/includes/layout/deck_player.php';
 requireLogin();
 
 $id = (int) ($_GET['id'] ?? 0);
@@ -49,11 +50,13 @@ require __DIR__ . '/includes/layout/dashboard_header.php';
 
 <article class="material-view-card">
     <header class="material-view-header">
-        <span class="material-view-type"><i class="fa-solid fa-<?= $type === 'doc' ? 'file-lines' : ($type === 'link' ? 'link' : 'file') ?>"></i> <?= e(materialTypeLabel($type)) ?></span>
+        <span class="material-view-type"><i class="fa-solid fa-<?= $type === 'doc' ? 'file-lines' : ($type === 'deck' ? 'display' : ($type === 'link' ? 'link' : 'file')) ?>"></i> <?= e(materialTypeLabel($type)) ?></span>
         <h1><?= e($mat['title']) ?></h1>
     </header>
 
-    <?php if ($type === 'doc'): ?>
+    <?php if ($type === 'deck'): ?>
+        <?php renderDeckPlayer((string) ($mat['content'] ?? ''), $mat['title']); ?>
+    <?php elseif ($type === 'doc'): ?>
         <div class="material-doc-body"><?= sanitizeHtml($mat['content'] ?? $mat['body'] ?? '') ?></div>
     <?php elseif ($type === 'link'): ?>
         <?php

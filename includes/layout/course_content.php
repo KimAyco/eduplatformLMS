@@ -80,6 +80,13 @@ function renderCourseLessonSection(array $section, int $classId, string $mode, a
             <?php if (!empty($section['description'])): ?>
                 <p class="course-lesson-desc"><?= e($section['description']) ?></p>
             <?php endif; ?>
+            <?php if ($mode === 'student' && schoolPracticeQuizzesEnabled()): ?>
+            <div class="course-lesson-practice">
+                <a href="<?= url('student/practice.php?class_id=' . $classId) ?>" class="btn btn-secondary btn-sm course-practice-btn" data-section-practice="<?= $sectionId ?>">
+                    <i class="fa-solid fa-dumbbell"></i> Practice this lesson
+                </a>
+            </div>
+            <?php endif; ?>
             <?php if ($activityCount === 0): ?>
                 <p class="course-lesson-empty text-muted"><?= $mode === 'teacher' ? 'No activities yet. Use the toolbar above to add content to this lesson.' : 'No activities in this lesson yet.' ?></p>
             <?php else: ?>
@@ -98,10 +105,35 @@ function renderCourseLessonSection(array $section, int $classId, string $mode, a
     <?php
 }
 
+function libraryMaterialStatusChip(array $material): string
+{
+    $status = $material['library_status'] ?? null;
+    if (!$status && !empty($material['library_resource_id'])) {
+        return '<span class="activity-meta-chip library-chip">From library</span>';
+    }
+    if (!$status) {
+        return '';
+    }
+
+    $label = match ($status) {
+        'pending' => 'Library: pending',
+        'published' => 'In library',
+        'rejected' => 'Library: rejected',
+        default => 'Library',
+    };
+    $class = 'library-chip library-chip--' . $status;
+    $html = '<span class="activity-meta-chip ' . e($class) . '"><i class="fa-solid fa-book-bookmark"></i> ' . e($label) . '</span>';
+    if ($status === 'rejected' && !empty($material['library_rejection_note'])) {
+        $html .= '<span class="activity-meta-chip muted" title="' . e($material['library_rejection_note']) . '">Note</span>';
+    }
+    return $html;
+}
+
 function materialActivityChipsHtml(array $item, bool $forTeacher = false): string
 {
     $item = MaterialRepository::normalizeRow($item);
     $html = '<span class="activity-meta-chip muted">' . e(materialTypeLabel($item['type'])) . '</span>';
+    $html .= libraryMaterialStatusChip($item);
     if ($item['type'] === 'file' && !empty($item['file_path'])) {
         $viewUrl = materialViewUrl((int) $item['id']);
         $html .= '<a href="' . e($viewUrl) . '" class="activity-meta-chip"><i class="fa-solid fa-eye"></i> View</a>';
@@ -225,6 +257,9 @@ function renderTeacherCourseActivityCard(array $act, int $classId, array $sectio
                     <a href="<?= teacherCourseUrl($classId, 'action=edit_material&item_id=' . $item['id']) ?>" class="btn btn-sm btn-secondary" title="Edit"><i class="fa-solid fa-pen"></i></a>
                     <?php if (($item['type'] ?? 'file') === 'doc'): ?>
                     <a href="<?= url('teacher/material-editor.php?id=' . $item['id'] . '&class_id=' . $classId) ?>" class="btn btn-sm btn-secondary" title="Edit document"><i class="fa-solid fa-file-lines"></i></a>
+                    <?php endif; ?>
+                    <?php if (canSubmitMaterialToLibrary($item, (int) ($item['teacher_id'] ?? 0))): ?>
+                    <button type="button" class="btn btn-sm btn-secondary" title="Share to library" data-share-material="<?= (int) $item['id'] ?>" data-share-title="<?= e($item['title']) ?>"><i class="fa-solid fa-book-bookmark"></i></button>
                     <?php endif; ?>
                     <form method="post" data-confirm="Delete this material?"><?= csrfField() ?><input type="hidden" name="form_action" value="delete_material"><input type="hidden" name="material_id" value="<?= (int) $item['id'] ?>"><button class="btn btn-sm btn-danger" title="Delete"><i class="fa-solid fa-trash"></i></button></form>
                 <?php elseif ($type === 'assignment'): ?>

@@ -12,22 +12,76 @@ class ClassGroupRepository
     public static function withCounts(int $schoolId): array
     {
         $stmt = db()->prepare('SELECT g.*,
+            p.name AS program_name,
+            pl.name AS level_name,
             (SELECT COUNT(*) FROM classes WHERE class_group_id = g.id) AS class_count,
             (SELECT COUNT(*) FROM class_group_students WHERE class_group_id = g.id) AS student_count,
             (SELECT COUNT(*) FROM classes c
                 WHERE c.class_group_id = g.id
                 AND NOT EXISTS (SELECT 1 FROM class_teachers ct WHERE ct.class_id = c.id)
             ) AS unassigned_count
-            FROM class_groups g WHERE g.school_id = ? ORDER BY g.name');
+            FROM class_groups g
+            LEFT JOIN programs p ON p.id = g.program_id
+            LEFT JOIN program_levels pl ON pl.id = g.program_level_id
+            WHERE g.school_id = ? ORDER BY g.name');
         $stmt->execute([$schoolId]);
         return $stmt->fetchAll();
     }
 
     public static function get(int $groupId, int $schoolId): ?array
     {
-        $stmt = db()->prepare('SELECT * FROM class_groups WHERE id = ? AND school_id = ?');
+        $stmt = db()->prepare('SELECT g.*, p.name AS program_name, pl.name AS level_name
+            FROM class_groups g
+            LEFT JOIN programs p ON p.id = g.program_id
+            LEFT JOIN program_levels pl ON pl.id = g.program_level_id
+            WHERE g.id = ? AND g.school_id = ?');
         $stmt->execute([$groupId, $schoolId]);
         return $stmt->fetch() ?: null;
+    }
+
+    public static function create(
+        int $schoolId,
+        string $name,
+        ?string $description,
+        ?string $academicYear,
+        ?int $programId = null,
+        ?int $programLevelId = null
+    ): int {
+        $stmt = db()->prepare('INSERT INTO class_groups (school_id, name, description, academic_year, program_id, program_level_id)
+            VALUES (?, ?, ?, ?, ?, ?)');
+        $stmt->execute([
+            $schoolId,
+            $name,
+            $description ?: null,
+            $academicYear ?: null,
+            $programId ?: null,
+            $programLevelId ?: null,
+        ]);
+        return (int) db()->lastInsertId();
+    }
+
+    public static function update(
+        int $groupId,
+        int $schoolId,
+        string $name,
+        ?string $description,
+        ?string $academicYear,
+        ?int $programId = null,
+        ?int $programLevelId = null
+    ): bool {
+        $stmt = db()->prepare('UPDATE class_groups
+            SET name = ?, description = ?, academic_year = ?, program_id = ?, program_level_id = ?
+            WHERE id = ? AND school_id = ?');
+        $stmt->execute([
+            $name,
+            $description ?: null,
+            $academicYear ?: null,
+            $programId ?: null,
+            $programLevelId ?: null,
+            $groupId,
+            $schoolId,
+        ]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function offerings(int $groupId, int $schoolId): array
@@ -106,6 +160,12 @@ class ClassGroupRepository
         }
         db()->prepare('INSERT IGNORE INTO class_group_students (class_group_id, student_id) VALUES (?, ?)')
             ->execute([$groupId, $studentId]);
+
+        $group = self::get($groupId, $schoolId);
+        if (!empty($group['program_id'])) {
+            ProgramRepository::enrollStudent($studentId, (int) $group['program_id'], $schoolId);
+        }
+
         return true;
     }
 

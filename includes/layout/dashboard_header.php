@@ -35,32 +35,68 @@ if ($role === 'student') {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="<?= url('assets/css/app.css') ?>">
+    <?php if ($user): ?>
+    <meta name="csrf-token" content="<?= e(csrfToken()) ?>">
+    <?php if (canUseMessaging($user)): ?>
+    <meta name="messenger-api" content="<?= e(url('api/messages.php')) ?>">
+    <?php endif; ?>
+    <?php if (!empty($user['school_id'])): ?>
+    <meta name="notifications-api" content="<?= e(url('api/notifications.php')) ?>">
+    <?php endif; ?>
+    <?php endif; ?>
 </head>
-<body class="moodle-body">
+<body class="moodle-body<?= !empty($editorShell) ? ' editor-shell-active' : '' ?>">
 <?php require __DIR__ . '/page_loader.php'; ?>
 <div class="moodle-app">
     <header class="moodle-navbar">
         <button type="button" class="drawer-toggle" id="drawerToggle" aria-label="Toggle navigation">
             <i class="fa-solid fa-bars"></i>
         </button>
+        <?php if ($user['school_name'] ?? null): ?>
+        <a href="<?= url('index.php') ?>" class="navbar-school navbar-school--brand" title="<?= e($user['school_name']) ?>">
+            <?= schoolAvatarHtml([
+                'name' => $user['school_name'],
+                'logo_image' => $user['school_logo_image'] ?? null,
+            ], 'navbar-school__avatar') ?>
+            <span class="navbar-school__meta">
+                <span class="navbar-school__label">School</span>
+                <span class="navbar-school__name"><?= e($user['school_name']) ?></span>
+            </span>
+        </a>
+        <?php if ($navbarContextExtra !== ''): ?>
+        <span class="navbar-term-chip">
+            <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+            <?= e($navbarContextExtra) ?>
+        </span>
+        <?php endif; ?>
+        <?php else: ?>
         <a href="<?= url('index.php') ?>" class="navbar-brand">
             <?= siteLogoImg('site-logo site-logo--navbar') ?>
             <span class="navbar-brand-name"><?= e(APP_NAME) ?></span>
         </a>
-        <?php if ($user['school_name'] ?? null): ?>
-            <span class="navbar-context"><?= e($user['school_name']) ?></span>
-        <?php endif; ?>
-        <?php if ($navbarContextExtra !== ''): ?>
-            <span class="navbar-term-chip"><?= e($navbarContextExtra) ?></span>
         <?php endif; ?>
         <div class="navbar-spacer"></div>
+        <?php if (canUseMessaging($user)): ?>
+        <div class="navbar-messages">
+            <a href="<?= url('messages.php') ?>" class="navbar-msg-btn" aria-label="Messages">
+                <i class="fa-regular fa-envelope"></i>
+                <span class="navbar-msg-badge" data-messenger-unread hidden>0</span>
+            </a>
+        </div>
+        <?php endif; ?>
         <div class="navbar-notifications">
             <button type="button" class="navbar-notif-btn" id="notifBtn" aria-label="Notifications">
                 <i class="fa-regular fa-bell"></i>
+                <span class="navbar-notif-badge" id="notifBadge" hidden>0</span>
             </button>
             <div class="notif-dropdown" id="notifDropdown">
-                <div class="notif-dropdown-header">Notifications</div>
-                <div class="notif-empty">No notifications yet</div>
+                <div class="notif-dropdown-header">
+                    <span>Notifications</span>
+                    <button type="button" class="notif-mark-all" id="notifMarkAll">Mark all read</button>
+                </div>
+                <div class="notif-dropdown-body" id="notifList"></div>
+                <div class="notif-empty" id="notifEmpty">No notifications yet</div>
+                <a href="<?= url('notifications.php') ?>" class="notif-view-all">View all</a>
             </div>
         </div>
         <div class="user-menu" id="userMenu">
@@ -76,12 +112,13 @@ if ($role === 'student') {
                 </div>
                 <a href="<?= url('profile.php') ?>"><i class="fa-solid fa-circle-user"></i> My profile</a>
                 <a href="<?= url('index.php') ?>"><i class="fa-solid fa-house"></i> Back to home</a>
-                <a href="<?= url('logout.php') ?>"><i class="fa-solid fa-right-from-bracket"></i> Log out</a>
+                <a href="<?= url('logout.php') ?>" data-confirm-logout="Are you sure you want to log out?"><i class="fa-solid fa-right-from-bracket"></i> Log out</a>
             </div>
         </div>
     </header>
 
-    <div class="moodle-layout">
+    <div class="moodle-layout<?= !empty($editorShell) ? ' editor-shell-layout' : '' ?>">
+        <?php if (empty($editorShell)): ?>
         <aside class="moodle-drawer" id="moodleDrawer">
             <div class="drawer-brand">
                 <span class="drawer-brand-label"><?= e($drawerLabel) ?></span>
@@ -115,10 +152,11 @@ if ($role === 'student') {
             </nav>
         </aside>
         <div class="drawer-overlay" id="drawerOverlay"></div>
+        <?php endif; ?>
 
-        <main class="moodle-main">
-            <?php require __DIR__ . '/breadcrumbs.php'; ?>
-            <?php if (empty($hidePageHeader)): ?>
+        <main class="moodle-main<?= !empty($editorShell) ? ' editor-shell-main' : '' ?>">
+            <?php if (empty($editorShell)): require __DIR__ . '/breadcrumbs.php'; endif; ?>
+            <?php if (empty($hidePageHeader) && empty($editorShell)): ?>
             <div class="page-header admin-page-header">
                 <div class="admin-page-header-text">
                     <h1><?= e($pageHeading ?? $pageTitle ?? '') ?></h1>

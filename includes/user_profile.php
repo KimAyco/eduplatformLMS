@@ -74,41 +74,82 @@ function handleUserProfilePhotoPost(array $user, string $redirectUrl): array
     return $errors;
 }
 
-function renderUserProfilePhotoPanel(array $user, string $heading = 'Profile photo', string $description = ''): void
+function renderUserProfilePhotoPanel(array $user, string $heading = 'Profile photo', string $description = '', bool $compact = false, bool $collapsible = false, bool $startOpen = false): void
 {
     if ($description === '') {
-        $description = 'Upload a square photo. It appears on your account, dashboard, and anywhere your name is shown.';
+        $description = 'Use a clear, square photo. It appears on your dashboard, navbar, and anywhere your name is shown.';
     }
-    ?>
-    <div class="panel user-profile-photo-panel">
-        <h3><i class="fa-solid fa-camera"></i> <?= e($heading) ?></h3>
-        <p class="text-muted mb-1"><?= e($description) ?></p>
 
-        <div class="user-profile-photo-preview" data-preview-avatar>
-            <?= userAvatarHtml($user, 'user-profile-avatar user-profile-avatar--large') ?>
+    $openByDefault = $collapsible && (
+        $startOpen
+        || (!empty($_POST['action']) && in_array($_POST['action'], ['upload_profile_photo', 'remove_profile_photo'], true))
+    );
+
+    $renderBody = static function () use ($user, $heading, $description, $compact, $collapsible): void {
+        if (!$collapsible): ?>
+        <div class="profile-photo-card__head">
+            <h3><i class="fa-solid fa-camera"></i> <?= e($heading) ?></h3>
+            <p class="text-muted"><?= e($description) ?></p>
         </div>
+        <?php endif;
 
-        <form method="post" enctype="multipart/form-data" class="school-settings-form" data-upload-preview>
+        if (!$compact): ?>
+        <div class="profile-photo-card__preview" data-preview-avatar>
+            <?= userAvatarHtml($user, 'profile-photo-card__avatar') ?>
+        </div>
+        <?php endif; ?>
+
+        <form method="post" enctype="multipart/form-data" class="profile-photo-form" data-upload-preview>
             <?= csrfField() ?>
             <input type="hidden" name="action" value="upload_profile_photo">
-            <div class="form-group">
-                <label for="profile_photo">Upload new photo</label>
-                <input type="file" id="profile_photo" name="profile_photo" class="form-control" accept="image/jpeg,image/png,image/webp,image/gif" required data-preview-input data-preview-type="avatar">
-                <small>JPG, PNG, WebP, or GIF. Max 2 MB. Recommended size: 256×256 px square.</small>
+            <label class="profile-photo-upload">
+                <input type="file" id="profile_photo" name="profile_photo" accept="image/jpeg,image/png,image/webp,image/gif" required data-preview-input data-preview-type="avatar" data-preview-scope="profile">
+                <span class="profile-photo-upload__box">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <strong>Choose a photo</strong>
+                    <span>JPG, PNG, WebP, or GIF · max 2 MB</span>
+                </span>
+            </label>
+            <p class="profile-photo-note" data-preview-note hidden><i class="fa-solid fa-eye"></i> Preview ready — save to upload.</p>
+            <div class="profile-photo-form__actions">
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save photo</button>
+                <?php if (!empty($user['profile_image'])): ?>
+                <button type="submit" form="profileRemovePhotoForm" class="btn btn-outline btn-sm" onclick="return confirm('Remove this profile photo?');">
+                    <i class="fa-solid fa-trash"></i> Remove
+                </button>
+                <?php endif; ?>
+                <?php if ($collapsible): ?>
+                <button type="button" class="btn btn-outline btn-sm" data-close-profile-photo>Cancel</button>
+                <?php endif; ?>
             </div>
-            <p class="image-upload-preview-note" data-preview-note hidden>Preview updated. Click Save photo to upload.</p>
-            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-upload"></i> Save photo</button>
         </form>
 
         <?php if (!empty($user['profile_image'])): ?>
-        <form method="post" class="school-settings-remove" onsubmit="return confirm('Remove this profile photo?');">
+        <form method="post" id="profileRemovePhotoForm" class="sr-only">
             <?= csrfField() ?>
             <input type="hidden" name="action" value="remove_profile_photo">
-            <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-trash"></i> Remove photo</button>
         </form>
-        <?php endif; ?>
+        <?php endif;
+    };
+
+    if ($collapsible): ?>
+    <div id="profilePhotoDrawer" class="profile-photo-drawer profile-photo-card panel"<?= $openByDefault ? '' : ' hidden' ?>>
+        <div class="profile-photo-drawer__head">
+            <h3><i class="fa-solid fa-camera"></i> <?= e($heading) ?></h3>
+            <button type="button" class="profile-photo-drawer__close" data-close-profile-photo aria-label="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <p class="profile-photo-drawer__desc text-muted"><?= e($description) ?></p>
+        <div class="profile-photo-drawer__body">
+            <?php $renderBody(); ?>
+        </div>
     </div>
-    <?php
+    <?php else: ?>
+    <div class="profile-photo-card panel">
+        <?php $renderBody(); ?>
+    </div>
+    <?php endif;
 }
 
 function menuItemsForRole(string $role): array
