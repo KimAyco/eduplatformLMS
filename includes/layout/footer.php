@@ -12,6 +12,7 @@
             <a href="<?= url('index.php#schools') ?>">Browse schools</a>
         </div>
         <p class="footer-copy">&copy; <?= date('Y') ?> <?= e(APP_NAME) ?>. All rights reserved.</p>
+        <p class="footer-version">System version <?= e(APP_VERSION) ?></p>
     </div>
 </footer>
 <?php endif; ?>

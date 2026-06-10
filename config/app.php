@@ -26,6 +26,7 @@ function resolveBaseUrl(): string
 }
 
 define('APP_NAME', env('APP_NAME', 'EduPlatform'));
+define('APP_VERSION', '1.2.0');
 define('APP_ENV', env('APP_ENV', 'local'));
 define('APP_DEBUG', (bool) env('APP_DEBUG', false));
 define('BASE_URL', resolveBaseUrl());

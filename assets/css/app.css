@@ -2048,9 +2048,11 @@ a:hover { color: var(--primary-dark); text-decoration: underline; }
 .footer-links a { color: rgba(255, 255, 255, 0.85); text-decoration: none; font-weight: 500; }
 .footer-links a:hover { color: #fff; text-decoration: underline; }
 .footer-copy { color: rgba(255, 255, 255, 0.5); font-size: 0.8125rem; margin-top: 0.5rem; }
+.footer-version { color: rgba(255, 255, 255, 0.4); font-size: 0.75rem; margin-top: 0.25rem; }
 @media (min-width: 768px) {
     .footer-inner { grid-template-columns: 1.5fr 1fr; align-items: start; }
-    .footer-copy { grid-column: 1 / -1; }
+    .footer-copy,
+    .footer-version { grid-column: 1 / -1; }
 }
 
 /* Legacy hero (auth pages) */
